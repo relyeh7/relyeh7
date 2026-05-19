@@ -83,3 +83,42 @@ def test_apply_execution_degradation():
     df_stress = forge.apply_execution_degradation(df, spread_mult=5, vol_mult=0.5)
     assert df_stress.iloc[0]['spread'] == 50
     assert df_stress.iloc[0]['tick_volume'] == 50
+
+def test_apply_execution_degradation_comprehensive():
+    df = pd.DataFrame({
+        'time': pd.to_datetime(['2026-01-01', '2026-01-02']),
+        'open': [2000.0, 2005.0],
+        'tick_volume': [100, 201],
+        'spread': [10, 12],
+        'real_volume': [500, 600]
+    })
+    forge = DataForge(init_mt5=False)
+    # Test with rounding and multiple rows
+    df_stress = forge.apply_execution_degradation(df, spread_mult=2.5, vol_mult=0.3)
+    
+    # Row 0: 10 * 2.5 = 25; 100 * 0.3 = 30
+    assert df_stress.iloc[0]['spread'] == 25
+    assert df_stress.iloc[0]['tick_volume'] == 30
+    
+    # Row 1: 12 * 2.5 = 30; 201 * 0.3 = 60.3 -> 60 (int cast)
+    assert df_stress.iloc[1]['spread'] == 30
+    assert df_stress.iloc[1]['tick_volume'] == 60
+    
+    # real_volume should be untouched in current implementation
+    assert df_stress.iloc[0]['real_volume'] == 500
+    
+    # Test vol_mult = 0
+    df_zero = forge.apply_execution_degradation(df, spread_mult=1, vol_mult=0)
+    assert (df_zero['tick_volume'] == 0).all()
+
+def test_apply_black_swan():
+    # Crear 100 velas planas
+    df = pd.DataFrame({
+        'time': pd.to_datetime(range(100), unit='D'),
+        'open': [2000.0]*100, 'high': [2000.0]*100, 'low': [2000.0]*100, 'close': [2000.0]*100,
+        'tick_volume': [100]*100, 'spread': [10]*100, 'real_volume': [0]*100
+    })
+    forge = DataForge(init_mt5=False)
+    df_stress = forge.apply_black_swan(df, total_pips=800)
+    # Verificar que el último precio es mucho mayor que el primero
+    assert df_stress.iloc[-1]['close'] > df_stress.iloc[0]['close'] + 500

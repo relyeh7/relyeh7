@@ -98,6 +98,17 @@ class DataForge:
         df_stress['tick_volume'] = (df_stress['tick_volume'] * vol_mult).astype(int)
         return df_stress
 
+    def apply_black_swan(self, df, total_pips=800):
+        """Genera rampa alcista sin retrocesos significativos."""
+        df_stress = df.copy()
+        n = len(df_stress)
+        rampa = np.linspace(0, total_pips, n) # Asumiendo pips en unidades de precio
+        df_stress['open'] += rampa
+        df_stress['high'] += rampa
+        df_stress['low'] += rampa
+        df_stress['close'] += rampa
+        return df_stress
+
     def create_custom_symbol(self, source_symbol, target_symbol, df_stress):
         """Carga los datos estresados en un nuevo símbolo personalizado en MT5."""
         # 1. Crear símbolo si no existe

@@ -4,10 +4,11 @@ import numpy as np
 import time
 
 class DataForge:
-    def __init__(self):
-        if not mt5.initialize():
-            print("Error al inicializar MetaTrader 5:", mt5.last_error())
-            raise Exception("MT5 initialization failed")
+    def __init__(self, init_mt5=True):
+        if init_mt5:
+            if not mt5.initialize():
+                print("Error al inicializar MetaTrader 5:", mt5.last_error())
+                raise Exception("MT5 initialization failed")
 
     def fetch_rates(self, symbol, timeframe, days):
         """Obtiene datos históricos del símbolo origen."""
@@ -71,13 +72,22 @@ class DataForge:
         """Inyecta ruido estocástico para romper patrones."""
         df_stress = df.copy()
         n = len(df_stress)
-        # Caminata aleatoria (Random Walk)
-        noise = np.cumsum(np.random.normal(0, noise_factor, n))
-        # Aplicar ruido al precio base
-        df_stress['open'] += noise
-        df_stress['high'] += noise
-        df_stress['low'] += noise
-        df_stress['close'] += noise
+        
+        # Apply independent noise to each price column to simulate real "break" and force integrity logic
+        for col in ['open', 'high', 'low', 'close']:
+            noise = np.random.normal(0, noise_factor, n)
+            df_stress[col] += noise
+            
+        # Clip values at a minimum of 0.01
+        for col in ['open', 'high', 'low', 'close']:
+            df_stress[col] = df_stress[col].clip(lower=0.01)
+            
+        # Force candle integrity
+        # High must be the maximum of all four prices
+        df_stress['high'] = df_stress[['open', 'high', 'low', 'close']].max(axis=1)
+        # Low must be the minimum of all four prices
+        df_stress['low'] = df_stress[['open', 'high', 'low', 'close']].min(axis=1)
+        
         return df_stress
 
     def create_custom_symbol(self, source_symbol, target_symbol, df_stress):

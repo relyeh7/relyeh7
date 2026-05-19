@@ -91,6 +91,13 @@ class DataForge:
         
         return df_stress
 
+    def apply_execution_degradation(self, df, spread_mult=5, vol_mult=0.5):
+        """Degrada spread y volumen de ticks."""
+        df_stress = df.copy()
+        df_stress['spread'] = (df_stress['spread'] * spread_mult).astype(int)
+        df_stress['tick_volume'] = (df_stress['tick_volume'] * vol_mult).astype(int)
+        return df_stress
+
     def create_custom_symbol(self, source_symbol, target_symbol, df_stress):
         """Carga los datos estresados en un nuevo símbolo personalizado en MT5."""
         # 1. Crear símbolo si no existe

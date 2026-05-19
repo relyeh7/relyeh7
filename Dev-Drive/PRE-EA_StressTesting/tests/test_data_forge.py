@@ -72,3 +72,14 @@ def test_correlation_break_is_brownian():
     # If it was white noise, diff(noise) would be much more volatile than noise itself
     # If it is Brownian, noise is much more "wandering" than steps.
     assert noise.std() > steps.std() * 2 # Heuristic: Brownian motion spreads out
+
+def test_apply_execution_degradation():
+    df = pd.DataFrame({
+        'time': pd.to_datetime(['2026-01-01']),
+        'open': [2000.0], 'high': [2010.0], 'low': [1990.0], 'close': [2000.0],
+        'tick_volume': [100], 'spread': [10], 'real_volume': [0]
+    })
+    forge = DataForge(init_mt5=False)
+    df_stress = forge.apply_execution_degradation(df, spread_mult=5, vol_mult=0.5)
+    assert df_stress.iloc[0]['spread'] == 50
+    assert df_stress.iloc[0]['tick_volume'] == 50

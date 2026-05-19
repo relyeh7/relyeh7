@@ -111,14 +111,49 @@ def test_apply_execution_degradation_comprehensive():
     df_zero = forge.apply_execution_degradation(df, spread_mult=1, vol_mult=0)
     assert (df_zero['tick_volume'] == 0).all()
 
-def test_apply_black_swan():
-    # Crear 100 velas planas
+def test_apply_black_swan_v2():
+    # 2016 velas (representando 7 días exactos en M5)
+    n = 2016
     df = pd.DataFrame({
-        'time': pd.to_datetime(range(100), unit='D'),
-        'open': [2000.0]*100, 'high': [2000.0]*100, 'low': [2000.0]*100, 'close': [2000.0]*100,
-        'tick_volume': [100]*100, 'spread': [10]*100, 'real_volume': [0]*100
+        'time': pd.to_datetime(range(n), unit='m', origin='2026-01-01'),
+        'open': [2000.0]*n, 'high': [2001.0]*n, 'low': [1999.0]*n, 'close': [2000.0]*n,
+        'tick_volume': [100]*n, 'spread': [10]*n, 'real_volume': [0]*n
+    })
+    forge = DataForge(init_mt5=False)
+    total_pips = 800
+    df_stress = forge.apply_black_swan(df, total_pips=total_pips)
+    
+    # 1. Verificar Delta total en 7 días (800 pips = 80.0 USD)
+    expected_delta = total_pips * 0.1
+    # Close de la última vela - Open de la primera
+    actual_delta = df_stress.iloc[-1]['close'] - df_stress.iloc[0]['open']
+    assert pytest.approx(actual_delta) == expected_delta
+    
+    # 2. Verificar Monotonicidad (Cero retrocesos)
+    # El Low de cada vela debe ser mayor al Low de la anterior
+    assert (df_stress['low'].diff().dropna() > 0).all()
+    
+    # 3. Verificar estructura de vela
+    assert (df_stress['high'] > df_stress['open']).all()
+    assert (df_stress['high'] > df_stress['close']).all()
+    assert (df_stress['low'] < df_stress['open']).all()
+    
+    # 4. Verificar preservación de volumen y spread
+    assert (df_stress['tick_volume'] == 100).all()
+    assert (df_stress['spread'] == 10).all()
+
+def test_apply_black_swan_long_duration():
+    # Probar que la pendiente se mantiene sobre 30 días
+    n = 30 * 24 * 12 # 30 días M5
+    df = pd.DataFrame({
+        'time': pd.to_datetime(range(n), unit='m'),
+        'open': [2000.0]*n, 'high': [2000.0]*n, 'low': [2000.0]*n, 'close': [2000.0]*n,
+        'tick_volume': [100]*n, 'spread': [10]*n, 'real_volume': [0]*n
     })
     forge = DataForge(init_mt5=False)
     df_stress = forge.apply_black_swan(df, total_pips=800)
-    # Verificar que el último precio es mucho mayor que el primero
-    assert df_stress.iloc[-1]['close'] > df_stress.iloc[0]['close'] + 500
+    
+    # Velocity: 800 pips / 7 days. In 30 days should be (30/7)*800 pips
+    expected_delta = (30 / 7) * 800 * 0.1
+    actual_delta = df_stress.iloc[-1]['close'] - df_stress.iloc[0]['open']
+    assert pytest.approx(actual_delta) == expected_delta

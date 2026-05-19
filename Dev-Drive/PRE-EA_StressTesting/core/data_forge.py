@@ -99,14 +99,26 @@ class DataForge:
         return df_stress
 
     def apply_black_swan(self, df, total_pips=800):
-        """Genera rampa alcista sin retrocesos significativos."""
+        """Genera tendencia sintética de +800 pips en 7 días (vía rampa lineal)."""
         df_stress = df.copy()
         n = len(df_stress)
-        rampa = np.linspace(0, total_pips, n) # Asumiendo pips en unidades de precio
-        df_stress['open'] += rampa
-        df_stress['high'] += rampa
-        df_stress['low'] += rampa
-        df_stress['close'] += rampa
+        
+        # 800 pips en oro = 80.0 unidades (XAUUSD: 1 pip = 0.1 USD)
+        price_delta = total_pips * 0.1 
+        
+        # Pendiente basada en 7 días (2016 velas de M5: 7 * 24 * 12)
+        candles_7_days = 7 * 24 * 12
+        slope_per_candle = price_delta / candles_7_days
+        
+        start_price = df_stress.iloc[0]['open']
+        rampa = np.arange(n) * slope_per_candle
+        
+        # Reemplazo sintético para asegurar CERO retrocesos
+        df_stress['open'] = start_price + rampa
+        df_stress['close'] = start_price + rampa + slope_per_candle
+        df_stress['high'] = df_stress[['open', 'close']].max(axis=1) + 0.05
+        df_stress['low'] = df_stress[['open', 'close']].min(axis=1) - 0.05
+        
         return df_stress
 
     def create_custom_symbol(self, source_symbol, target_symbol, df_stress):

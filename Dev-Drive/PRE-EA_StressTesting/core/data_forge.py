@@ -69,23 +69,24 @@ class DataForge:
         return df_stress
 
     def apply_correlation_break(self, df, noise_factor=0.05):
-        """Inyecta ruido estocástico para romper patrones."""
+        """Inyecta ruido browniano para romper patrones manteniendo la estructura de la vela."""
         df_stress = df.copy()
         n = len(df_stress)
         
-        # Apply independent noise to each price column to simulate real "break" and force integrity logic
+        # Generar una única serie de ruido browniano (Random Walk)
+        # np.cumsum(np.random.normal(0, noise_factor, n))
+        noise = np.cumsum(np.random.normal(0, noise_factor, n))
+        
+        # Aplicar el MISMO ruido a todas las columnas de precio para preservar la estructura básica
         for col in ['open', 'high', 'low', 'close']:
-            noise = np.random.normal(0, noise_factor, n)
             df_stress[col] += noise
             
         # Clip values at a minimum of 0.01
         for col in ['open', 'high', 'low', 'close']:
             df_stress[col] = df_stress[col].clip(lower=0.01)
             
-        # Force candle integrity
-        # High must be the maximum of all four prices
+        # Force candle integrity (just in case clipping or previous values caused issues)
         df_stress['high'] = df_stress[['open', 'high', 'low', 'close']].max(axis=1)
-        # Low must be the minimum of all four prices
         df_stress['low'] = df_stress[['open', 'high', 'low', 'close']].min(axis=1)
         
         return df_stress

@@ -18,3 +18,16 @@ Esta prueba evalúa si el rendimiento de la estrategia depende de una secuencia 
 
 ### Criterio de Fallo:
 - La estrategia falla si el **Max Drawdown** en el percentil 95 aumenta más de un **20%** respecto al backtest original.
+
+## Paso 2: Monte Carlo - Market Level (Mercado)
+Simula condiciones de mercado degradadas (spreads más altos y ejecución imperfecta).
+
+### Configuración en SQX:
+1. Ve a **Robustness Tests** -> **Monte Carlo (Market)**.
+2. Configura las variaciones aleatorias:
+   - **Spread**: Variación de ±20%.
+   - **Slippage**: Variación de ±50%.
+3. **Number of simulations**: 40-100.
+
+### Criterio de Supervivencia:
+- El **90%** de las simulaciones deben ser rentables (Profit > 0). Esto asegura que la estrategia no es "frágil" ante el ruido del broker.

@@ -47,3 +47,20 @@ def test_order_roundtrip():
     dumped = order.model_dump()
     restored = Order.model_validate(dumped)
     assert restored.order_id == "abc-123"
+
+
+def test_ohlcv_bar():
+    from shared.models import OHLCVBar
+    bar = OHLCVBar(timestamp="2026-01-01T00:00:00", open=100.0, high=105.0,
+                   low=99.0, close=103.0, volume=1500.0)
+    assert bar.close == 103.0
+    d = bar.model_dump()
+    assert d["volume"] == 1500.0
+
+
+def test_orchestrator_decision_defaults():
+    from shared.models import OrchestratorDecision
+    dec = OrchestratorDecision(action="HOLD", reason="calm market", confidence=0.7)
+    assert dec.market == "crypto"
+    assert dec.capital_pct == 0.0
+    assert dec.exchange == "auto"

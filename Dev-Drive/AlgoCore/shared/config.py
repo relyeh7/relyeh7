@@ -26,5 +26,12 @@ class Settings(BaseSettings):
     stop_on_drawdown_pct:   float = 6.0
     max_exposure_pct:       float = 90.0
 
+    # Telegram
+    telegram_bot_token: str = ""
+    telegram_chat_id:   str = ""
+
+    # MLflow
+    mlflow_tracking_uri: str = "mlruns"
+
 
 settings = Settings()

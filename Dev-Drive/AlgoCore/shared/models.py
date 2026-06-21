@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from pydantic import BaseModel, Field
 
@@ -55,3 +55,25 @@ class RiskState(BaseModel):
     exposure_pct:   float = 0.0
     is_stopped:     bool  = False
     open_positions: int   = 0
+
+
+class OHLCVBar(BaseModel):
+    timestamp: str
+    open:      float
+    high:      float
+    low:       float
+    close:     float
+    volume:    float
+
+
+class OrchestratorDecision(BaseModel):
+    action:      str                          # HOLD|BUY|SELL|ADJUST_POSITION|PAUSE_STRATEGY|RESUME_ALL|STOP_ALL
+    market:      str  = "crypto"              # crypto|forex|both
+    exchange:    str  = "auto"                # bitget|binance|mt5|auto
+    strategy:    str  = "ml"                  # grid|rsi|ml|rl|technical
+    capital_pct: float = Field(ge=0.0, le=1.0, default=0.0)
+    reason:      str  = ""
+    confidence:  float = Field(ge=0.0, le=1.0, default=0.5)
+    timestamp:   str  = Field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+    )

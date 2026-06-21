@@ -56,4 +56,7 @@ class BinanceClient:
         r = requests.post(f"{self.BASE}/api/v3/order",
                           params=params, headers=self._headers(), timeout=10)
         r.raise_for_status()
-        return str(r.json()["orderId"])
+        body = r.json()
+        if "orderId" not in body:
+            raise ValueError(f"Binance order failed: {body}")
+        return str(body["orderId"])

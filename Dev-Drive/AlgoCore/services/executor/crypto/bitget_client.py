@@ -42,7 +42,10 @@ class BitgetClient:
         r = requests.post(self.BASE + path, data=b,
                           headers=self._headers("POST", path, b), timeout=10)
         r.raise_for_status()
-        return r.json().get("data", {})
+        resp = r.json()
+        if resp.get("code") != "00000":
+            raise ValueError(f"Bitget error {resp.get('code')}: {resp.get('msg')}")
+        return resp.get("data", {})
 
     def get_ticker(self, symbol: str) -> float:
         data = self._get("/api/v2/spot/market/tickers", {"symbol": symbol})

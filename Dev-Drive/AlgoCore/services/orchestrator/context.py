@@ -11,9 +11,13 @@ def build_context(last_signal_id: str = "0") -> tuple[str, dict, list[dict]]:
         "daily_pnl_pct":  risk_raw.get("daily_pnl_pct", 0.0),
         "open_positions": risk_raw.get("open_positions", 0),
     }
-    ml_signals = subscribe_once(events.ML_SIGNAL, last_id=last_signal_id)
-    prices_raw = subscribe_once(events.PRICE_TICK, last_id="0")
-    prices = {p["symbol"]: p["price"] for p in prices_raw[-5:]} if prices_raw else {}
+    sentiment_raw = get_state("sentiment") or {}
+    fear_greed    = sentiment_raw.get("fear_greed_score", None)
+    news_sent     = sentiment_raw.get("news_sentiment", None)
+
+    ml_signals  = subscribe_once(events.ML_SIGNAL, last_id=last_signal_id)
+    prices_raw  = subscribe_once(events.PRICE_TICK, last_id="0")
+    prices      = {p["symbol"]: p["price"] for p in prices_raw[-5:]} if prices_raw else {}
 
     signal_summary = ""
     for s in ml_signals:
@@ -26,16 +30,23 @@ def build_context(last_signal_id: str = "0") -> tuple[str, dict, list[dict]]:
 
     price_summary = ", ".join(f"{k}=${v:.2f}" for k, v in prices.items()) or "no price data"
 
-    prompt = f"""=== MARKET STATE ===
-Prices: {price_summary}
+    if fear_greed is not None:
+        sentiment_section = (
+            f"\n=== SENTIMENT ===\n"
+            f"Fear & Greed: {fear_greed:.2f} (0=extreme fear, 1=extreme greed)\n"
+            f"News sentiment: {news_sent:.2f}\n"
+        )
+    else:
+        sentiment_section = "\n=== SENTIMENT ===\nNo sentiment data yet.\n"
 
-=== RISK ===
-Drawdown: {risk['drawdown_pct']:.2f}%  Exposure: {risk['exposure_pct']:.1f}%
-Daily P&L: {risk['daily_pnl_pct']:+.2f}%  Stopped: {risk['is_stopped']}
-Open positions: {risk['open_positions']}
-
-=== ML SIGNALS (last 15 min) ===
-{signal_summary}
-Analyze the above and call set_trading_action with your decision."""
-
+    prompt = (
+        f"=== MARKET STATE ===\nPrices: {price_summary}\n\n"
+        f"=== RISK ===\n"
+        f"Drawdown: {risk['drawdown_pct']:.2f}%  Exposure: {risk['exposure_pct']:.1f}%\n"
+        f"Daily P&L: {risk['daily_pnl_pct']:+.2f}%  Stopped: {risk['is_stopped']}\n"
+        f"Open positions: {risk['open_positions']}\n"
+        f"{sentiment_section}\n"
+        f"=== ML SIGNALS (last 15 min) ===\n{signal_summary}"
+        f"Analyze the above and call set_trading_action with your decision."
+    )
     return prompt, risk, ml_signals

@@ -34,3 +34,19 @@ def test_agent_uses_claude_when_key_available():
         )
     assert result["action"] == "HOLD"
     assert result["confidence"] == 0.8
+
+
+def test_context_includes_sentiment_when_available():
+    from unittest.mock import patch
+    with patch("services.orchestrator.context.get_state") as mock_state, \
+         patch("services.orchestrator.context.subscribe_once", return_value=[]):
+        mock_state.side_effect = lambda key: (
+            {"drawdown_pct": 1.0, "is_stopped": False,
+             "exposure_pct": 20.0, "daily_pnl_pct": 0.5, "open_positions": 1}
+            if key == "risk"
+            else {"fear_greed_score": 0.72, "news_sentiment": 0.65}
+        )
+        from services.orchestrator.context import build_context
+        prompt, _, _ = build_context()
+    assert "Fear & Greed" in prompt
+    assert "0.72" in prompt

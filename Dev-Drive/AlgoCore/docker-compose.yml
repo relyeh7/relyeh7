@@ -43,7 +43,7 @@ services:
     build:
       context: .
       args:
-        SERVICE_MODULE: risk.service
+        SERVICE_MODULE: services.risk.service
     env_file: .env
     depends_on:
       redis:

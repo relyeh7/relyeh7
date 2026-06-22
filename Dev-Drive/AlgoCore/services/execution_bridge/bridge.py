@@ -64,7 +64,7 @@ class ExecutionBridge:
             "symbol": self.symbol,
             "action": out_action,
             "confidence": decision.get("confidence", 0.5),
-            "strategy": decision.get("strategy", "ml"),
+            "strategy": decision.get("strategy", "orchestrator"),
             "exchange": output_exchange,
             "timestamp": decision.get("timestamp"),
         }

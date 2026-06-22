@@ -77,3 +77,11 @@ class OrchestratorDecision(BaseModel):
     timestamp:   str  = Field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
     )
+
+
+class SentimentState(BaseModel):
+    fear_greed_score: float = Field(ge=0.0, le=1.0)
+    news_sentiment:   float = Field(ge=0.0, le=1.0, default=0.5)
+    updated_at:       str   = Field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+    )

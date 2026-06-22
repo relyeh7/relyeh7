@@ -64,3 +64,12 @@ def test_orchestrator_decision_defaults():
     assert dec.market == "crypto"
     assert dec.capital_pct == 0.0
     assert dec.exchange == "auto"
+
+
+def test_sentiment_state_model():
+    from shared.models import SentimentState
+    s = SentimentState(fear_greed_score=0.72, news_sentiment=0.6, updated_at="2026-06-21T10:00:00Z")
+    assert s.fear_greed_score == 0.72
+    assert s.news_sentiment == 0.6
+    assert 0.0 <= s.fear_greed_score <= 1.0
+    assert 0.0 <= s.news_sentiment <= 1.0

@@ -30,6 +30,12 @@ class Settings(BaseSettings):
     telegram_bot_token: str = ""
     telegram_chat_id:   str = ""
 
+    # Sentiment
+    cryptopanic_api_key: str = ""
+
+    # Trading
+    trading_symbol: str = "BTCUSDT"
+
     # MLflow
     mlflow_tracking_uri: str = "mlruns"
 

@@ -1,4 +1,5 @@
 import logging
+import time
 from datetime import datetime, timezone
 
 from services.ml.models.rl_model import RLModel
@@ -6,7 +7,6 @@ from services.ml.data.fetcher import OHLCVFetcher
 from services.ml.features import build_features
 from shared.state import publish
 from shared import events
-from shared.config import settings
 
 
 _logger = logging.getLogger(__name__)
@@ -83,7 +83,14 @@ class RLService:
 
     def run(self) -> None:
         """
-        Main execution loop (placeholder for async scheduler integration).
-        Currently just calls _run_once(); extend for continuous execution.
+        Main execution loop: continuously fetch, train, and publish signals.
         """
-        self._run_once()
+        while True:
+            self._run_once()
+            time.sleep(self._interval)
+
+
+if __name__ == "__main__":
+    from shared.config import settings
+
+    RLService(settings.trading_symbol, "binance").run()

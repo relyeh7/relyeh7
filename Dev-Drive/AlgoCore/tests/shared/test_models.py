@@ -64,3 +64,45 @@ def test_orchestrator_decision_defaults():
     assert dec.market == "crypto"
     assert dec.capital_pct == 0.0
     assert dec.exchange == "auto"
+
+
+def test_sentiment_state_model():
+    from shared.models import SentimentState
+    s = SentimentState(fear_greed_score=0.72, news_sentiment=0.6, updated_at="2026-06-21T10:00:00Z")
+    assert s.fear_greed_score == 0.72
+    assert s.news_sentiment == 0.6
+    assert 0.0 <= s.fear_greed_score <= 1.0
+    assert 0.0 <= s.news_sentiment <= 1.0
+
+
+def test_trade_model():
+    from shared.models import Trade, Side
+    from datetime import datetime, timezone
+    t = Trade(
+        symbol="BTCUSDT", side=Side.BUY,
+        entry_price=50000.0, exit_price=51000.0,
+        size=0.01, pnl=10.0, strategy="ml",
+        opened_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        closed_at=datetime(2026, 1, 1, 1, tzinfo=timezone.utc),
+    )
+    assert t.pnl == 10.0
+    assert t.id != ""
+
+
+def test_position_model():
+    from shared.models import Position, Side
+    p = Position(symbol="ETHUSDT", side=Side.BUY, entry_price=3000.0, size=0.1, strategy="rl")
+    assert p.symbol == "ETHUSDT"
+    assert p.entry_price == 3000.0
+
+
+def test_backtest_result_model():
+    from shared.models import BacktestResult
+    r = BacktestResult(
+        symbol="BTCUSDT", strategy="ml", n_trades=10,
+        sharpe=1.5, max_dd=3.2, win_rate=0.6,
+        profit_factor=1.8, total_pnl=500.0,
+        equity_curve=[10000.0, 10050.0, 10100.0],
+    )
+    assert r.win_rate == 0.6
+    assert len(r.equity_curve) == 3

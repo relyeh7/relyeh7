@@ -1,3 +1,4 @@
+import uuid
 from datetime import datetime, timezone
 from enum import Enum
 from pydantic import BaseModel, Field
@@ -77,3 +78,49 @@ class OrchestratorDecision(BaseModel):
     timestamp:   str  = Field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
     )
+
+
+class SentimentState(BaseModel):
+    fear_greed_score: float = Field(ge=0.0, le=1.0)
+    news_sentiment:   float = Field(ge=0.0, le=1.0, default=0.5)
+    updated_at:       str   = Field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+    )
+
+
+class Trade(BaseModel):
+    id:          str      = Field(default_factory=lambda: str(uuid.uuid4()))
+    symbol:      str
+    side:        Side
+    entry_price: float
+    exit_price:  float
+    size:        float
+    pnl:         float
+    strategy:    str      = "unknown"
+    opened_at:   datetime
+    closed_at:   datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc)
+    )
+
+
+class Position(BaseModel):
+    symbol:      str
+    side:        Side
+    entry_price: float
+    size:        float
+    strategy:    str      = "unknown"
+    opened_at:   datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc)
+    )
+
+
+class BacktestResult(BaseModel):
+    symbol:        str
+    strategy:      str
+    n_trades:      int
+    sharpe:        float
+    max_dd:        float          # max drawdown % (0–100)
+    win_rate:      float          # 0.0–1.0
+    profit_factor: float          # gross_profit / gross_loss; inf if no losses
+    total_pnl:     float
+    equity_curve:  list[float]

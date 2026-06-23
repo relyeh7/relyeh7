@@ -6,6 +6,11 @@ services:
     volumes:
       - redis_data:/data
     command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
   postgres:
     image: postgres:15-alpine
@@ -17,6 +22,125 @@ services:
       - "5432:5432"
     volumes:
       - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U algocore"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  data-feed:
+    build:
+      context: .
+      args:
+        SERVICE_MODULE: services.data.service
+    env_file: .env
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  risk:
+    build:
+      context: .
+      args:
+        SERVICE_MODULE: services.risk.service
+    env_file: .env
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  executor:
+    build:
+      context: .
+      args:
+        SERVICE_MODULE: services.executor.crypto.service
+    env_file: .env
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  ml:
+    build:
+      context: .
+      args:
+        SERVICE_MODULE: services.ml.service
+    env_file: .env
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  rl:
+    build:
+      context: .
+      args:
+        SERVICE_MODULE: services.ml.rl_service
+    env_file: .env
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  orchestrator:
+    build:
+      context: .
+      args:
+        SERVICE_MODULE: services.orchestrator.service
+    env_file: .env
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  sentiment:
+    build:
+      context: .
+      args:
+        SERVICE_MODULE: services.sentiment.service
+    env_file: .env
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  execution-bridge:
+    build:
+      context: .
+      args:
+        SERVICE_MODULE: services.execution_bridge.bridge
+    env_file: .env
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  notifications:
+    build:
+      context: .
+      args:
+        SERVICE_MODULE: services.notifications.alerts
+    env_file: .env
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  dashboard:
+    build:
+      context: .
+      args:
+        SERVICE_MODULE: services.dashboard.api.main
+    env_file: .env
+    ports:
+      - "8000:8000"
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
 
 volumes:
   redis_data:

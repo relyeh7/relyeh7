@@ -32,24 +32,33 @@ class TradeJournal:
 
     def ensure_table(self) -> None:
         conn = psycopg2.connect(self._db_url)
-        with conn, conn.cursor() as cur:
-            cur.execute(_CREATE_SQL)
+        try:
+            with conn, conn.cursor() as cur:
+                cur.execute(_CREATE_SQL)
+        finally:
+            conn.close()
 
     def save(self, trade: Trade) -> None:
         conn = psycopg2.connect(self._db_url)
-        with conn, conn.cursor() as cur:
-            cur.execute(_INSERT_SQL, (
-                trade.id, trade.symbol, trade.side.value,
-                trade.entry_price, trade.exit_price, trade.size,
-                trade.pnl, trade.strategy,
-                trade.opened_at.isoformat(), trade.closed_at.isoformat(),
-            ))
+        try:
+            with conn, conn.cursor() as cur:
+                cur.execute(_INSERT_SQL, (
+                    trade.id, trade.symbol, trade.side.value,
+                    trade.entry_price, trade.exit_price, trade.size,
+                    trade.pnl, trade.strategy,
+                    trade.opened_at.isoformat(), trade.closed_at.isoformat(),
+                ))
+        finally:
+            conn.close()
 
     def get_recent(self, limit: int = 100) -> list[Trade]:
         conn = psycopg2.connect(self._db_url)
-        with conn, conn.cursor() as cur:
-            cur.execute(_SELECT_SQL, (limit,))
-            rows = cur.fetchall()
+        try:
+            with conn, conn.cursor() as cur:
+                cur.execute(_SELECT_SQL, (limit,))
+                rows = cur.fetchall()
+        finally:
+            conn.close()
         return [
             Trade(
                 id=r[0], symbol=r[1], side=Side(r[2]),

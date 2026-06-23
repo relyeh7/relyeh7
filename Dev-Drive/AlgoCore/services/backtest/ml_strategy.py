@@ -39,14 +39,14 @@ def _surviving_positions(df: pd.DataFrame) -> list[int]:
     ema12             = close.ewm(span=12, adjust=False).mean()
     ema26             = close.ewm(span=26, adjust=False).mean()
     mask["macd"]      = ema12 - ema26
-    mask["macd_sig"]  = mask["macd"].ewm(span=9, adjust=False).mean()
-    mask["macd_hist"] = mask["macd"] - mask["macd_sig"]
+    mask["macd_signal"] = mask["macd"].ewm(span=9, adjust=False).mean()
+    mask["macd_hist"]   = mask["macd"] - mask["macd_signal"]
 
     sma20            = close.rolling(20).mean()
     std20            = close.rolling(20).std()
     mask["bb_width"] = ((sma20 + 2*std20) - (sma20 - 2*std20)) / sma20.replace(0, 1e-10)
     mask["returns"]  = close.pct_change()
-    mask["vol_r"]    = vol / vol.rolling(20).mean().replace(0, 1e-10)
+    mask["volume_ratio"] = vol / vol.rolling(20).mean().replace(0, 1e-10)
 
     ts              = pd.to_datetime(df["timestamp"].reset_index(drop=True), utc=True)
     mask["hour"]    = ts.dt.hour.astype(float)

@@ -25,7 +25,7 @@ class BacktestEngine:
         trade_pnls: list[float] = []
         equity_curve: list[float] = [equity] * len(df)
 
-        for i, row in df.iterrows():
+        for pos, (i, row) in enumerate(df.iterrows()):
             sig = signal_fn(row)
             close = float(row["close"])
 
@@ -41,9 +41,9 @@ class BacktestEngine:
 
             if in_position:
                 unrealized = (close - entry_price) * self._size * (1 - self._fee)
-                equity_curve[i] = equity + unrealized
+                equity_curve[pos] = equity + unrealized
             else:
-                equity_curve[i] = equity
+                equity_curve[pos] = equity
 
         # Force-close at end if still in position
         if in_position:

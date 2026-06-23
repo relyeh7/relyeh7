@@ -106,3 +106,16 @@ def test_backtest_result_model():
     )
     assert r.win_rate == 0.6
     assert len(r.equity_curve) == 3
+
+
+def test_order_state_model():
+    from shared.models import OrderState, Side
+    from datetime import datetime, timezone
+    o = OrderState(
+        id="ord-001", symbol="BTCUSDT", side=Side.BUY,
+        price=50000.0, size=0.01, exchange="bitget", strategy="ml",
+        placed_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+    )
+    assert o.id == "ord-001"
+    assert o.exchange == "bitget"
+    assert o.strategy == "ml"

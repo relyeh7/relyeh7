@@ -124,3 +124,16 @@ class BacktestResult(BaseModel):
     profit_factor: float          # gross_profit / gross_loss; inf if no losses
     total_pnl:     float
     equity_curve:  list[float]
+
+
+class OrderState(BaseModel):
+    id:         str
+    symbol:     str
+    side:       Side
+    price:      float
+    size:       float
+    exchange:   str
+    strategy:   str      = "unknown"
+    placed_at:  datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc)
+    )

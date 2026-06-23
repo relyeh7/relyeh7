@@ -1,5 +1,5 @@
 import pandas as pd
-from services.ml.features import build_features, FEATURE_COLS
+from services.ml.features import build_features
 from services.ml.models.xgboost_model import XGBoostModel
 from services.ml.inference.predictor import Predictor
 from services.backtest.engine import BacktestEngine

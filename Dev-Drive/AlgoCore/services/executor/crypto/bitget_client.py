@@ -73,3 +73,17 @@ class BitgetClient:
         self._post("/api/v2/spot/trade/cancel-order",
                    {"symbol": symbol, "orderId": order_id})
         return True
+
+    def get_order_status(self, order_id: str, symbol: str) -> str:
+        try:
+            data = self._get("/api/v2/spot/trade/orderInfo",
+                             {"orderId": order_id, "symbol": symbol})
+            items = data if isinstance(data, list) else [data]
+            raw = items[0].get("status", "live") if items else "live"
+            if raw == "filled":
+                return "filled"
+            if raw == "cancelled":
+                return "cancelled"
+            return "pending"
+        except Exception:
+            return "pending"

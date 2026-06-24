@@ -1,4 +1,5 @@
 from unittest.mock import MagicMock, patch
+from shared import events
 
 
 def test_rest_poller_poll_once_writes_price_state():
@@ -48,6 +49,6 @@ def test_rest_poller_publishes_price_tick_event():
 
     mock_pub.assert_called_once()
     channel, payload = mock_pub.call_args[0]
-    assert channel == "price:tick"
+    assert channel == events.PRICE_TICK
     assert payload["symbol"] == "BTCUSDT"
     assert payload["price"] == 60000.0

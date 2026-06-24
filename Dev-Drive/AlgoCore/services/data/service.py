@@ -27,7 +27,6 @@ class DataService:
         for t in threads:
             t.start()
         logger.info("[DataService] Feeds iniciados: %s", [t.name for t in threads])
-        print("[DataService] Feeds iniciados:", [t.name for t in threads])
         for t in threads:
             t.join()
 

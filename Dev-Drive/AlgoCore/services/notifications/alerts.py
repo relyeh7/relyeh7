@@ -78,11 +78,15 @@ class AlertSubscriber:
 
     def _poll(self) -> None:
         """Legacy method: poll and handle multiple event types."""
-        for channel, last_id in self._last_ids.items():
-            for payload in subscribe_once(channel, last_id=last_id):
+        for channel in list(self._last_ids.keys()):
+            last_id = self._last_ids[channel]
+            payloads = subscribe_once(channel, last_id=last_id)
+            for payload in payloads:
                 msg = self._format(channel, payload)
                 if msg:
                     self._tg.send(msg)
+            if payloads:
+                self._last_ids[channel] = payloads[-1].get("timestamp", last_id)
 
     @staticmethod
     def _format(channel: str, payload: dict) -> str | None:

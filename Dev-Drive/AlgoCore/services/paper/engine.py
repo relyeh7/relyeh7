@@ -24,8 +24,8 @@ class PaperEngine:
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "order_id":  str(uuid.uuid4()),
         }
-        publish(events.ORDER_FILLED, fill)
         publish(events.ORDER_PLACED, {**fill, "status": "paper_filled"})
+        publish(events.ORDER_FILLED, fill)
         return fill
 
     def run_once(self, decision: dict) -> dict | None:

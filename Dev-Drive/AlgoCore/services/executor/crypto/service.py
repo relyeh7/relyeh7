@@ -8,6 +8,8 @@ from shared.state import subscribe_once, publish
 from services.executor.crypto.router import ExchangeRouter
 from services.executor.crypto.tracker import OrderTracker
 from services.paper.engine import PaperEngine
+from services.risk.gate import RiskGate
+from services.sizing.kelly import KellySizer
 
 logger = logging.getLogger(__name__)
 
@@ -23,12 +25,17 @@ class ExecutorService:
         router:       ExchangeRouter | None = None,
         tracker:      OrderTracker   | None = None,
     ):
-        self._paper   = paper_engine or PaperEngine()
-        self._router  = router  or ExchangeRouter()
-        self._tracker = tracker or OrderTracker(self._router)
-        self._last_id = "0"
+        self._paper      = paper_engine or PaperEngine()
+        self._router     = router  or ExchangeRouter()
+        self._tracker    = tracker or OrderTracker(self._router)
+        self._last_id    = "0"
+        self._risk_gate  = RiskGate()
+        self._sizer      = KellySizer()
 
     def _process_decisions(self) -> None:
+        if self._risk_gate.is_blocked():
+            logger.warning("[Executor] Risk gate BLOCKED — skipping decisions")
+            return
         decisions = subscribe_once(events.ORCH_DECISION, last_id=self._last_id)
         for decision in decisions:
             action = decision.get("action", "")
@@ -43,10 +50,12 @@ class ExecutorService:
                             f"{fill['side']} @ {fill['price']}"
                         )
                 else:
-                    symbol   = decision.get("symbol", "BTCUSDT")
-                    price    = float(decision.get("price", 0))
-                    size     = float(decision.get("size", 0.01))
-                    exchange = decision.get("exchange", "bitget")
+                    symbol     = decision.get("symbol", "BTCUSDT")
+                    price      = float(decision.get("price", 0))
+                    raw_size   = float(decision.get("size", 0.01))
+                    kelly_size = self._sizer.compute(decision.get("strategy", "orchestrator"))
+                    size       = min(raw_size, kelly_size)
+                    exchange   = decision.get("exchange", "bitget")
                     order_id = self._router.place_order(symbol, action.lower(), price, size)
                     order    = OrderState(
                         id=order_id, symbol=symbol,

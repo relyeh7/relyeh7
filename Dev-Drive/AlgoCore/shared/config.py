@@ -35,6 +35,9 @@ class Settings(BaseSettings):
 
     # Trading
     trading_symbol: str = "BTCUSDT"
+    paper_trading:    bool      = True
+    trading_symbols:  list[str] = ["BTCUSDT"]
+    api_key:          str       = ""
 
     # MLflow
     mlflow_tracking_uri: str = "mlruns"

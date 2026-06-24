@@ -119,3 +119,15 @@ def test_order_state_model():
     assert o.id == "ord-001"
     assert o.exchange == "bitget"
     assert o.strategy == "ml"
+
+
+def test_phase6_config_fields():
+    from shared.config import settings
+    assert isinstance(settings.stop_loss_pct, float)
+    assert isinstance(settings.take_profit_pct, float)
+    assert isinstance(settings.kelly_fraction, float)
+    assert isinstance(settings.feed_poll_sec, int)
+    assert settings.stop_loss_pct > 0
+    assert settings.take_profit_pct > 0
+    assert 0 < settings.kelly_fraction <= 1.0
+    assert settings.feed_poll_sec > 0

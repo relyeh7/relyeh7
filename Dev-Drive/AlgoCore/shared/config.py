@@ -39,6 +39,12 @@ class Settings(BaseSettings):
     trading_symbols:  list[str] = ["BTCUSDT"]
     api_key:          str       = ""
 
+    # Phase 6 — risk management
+    stop_loss_pct:    float = 2.0
+    take_profit_pct:  float = 4.0
+    kelly_fraction:   float = 0.25
+    feed_poll_sec:    int   = 30
+
     # MLflow
     mlflow_tracking_uri: str = "mlruns"
 

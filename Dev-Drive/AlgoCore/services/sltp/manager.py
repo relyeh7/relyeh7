@@ -65,13 +65,10 @@ class SLTPManager:
 
     def run(self) -> None:
         logger.info("[SLTPManager] Starting")
-        last_id = "0"
         while True:
-            ticks = subscribe_once(events.PRICE_TICK, last_id=last_id)
+            ticks = subscribe_once(events.PRICE_TICK)
             for tick in ticks:
                 self.process_tick(tick)
-            if ticks:
-                last_id = ticks[-1].get("timestamp", last_id)
             time.sleep(1)
 
 

@@ -50,3 +50,38 @@ def test_subscribe_once_returns_payloads(patch_redis):
     results = subscribe_once("price:tick", "$")
     assert len(results) == 1
     assert results[0]["price"] == 2500.0
+
+
+def test_subscribe_since_returns_tuple():
+    with patch("shared.state._redis") as mock_redis:
+        mock_redis.xread.return_value = []
+        from shared.state import subscribe_since
+        result = subscribe_since("price:tick")
+    assert isinstance(result, tuple)
+    assert len(result) == 2
+    payloads, last_id = result
+    assert isinstance(payloads, list)
+    assert isinstance(last_id, str)
+
+
+def test_subscribe_since_returns_last_stream_id():
+    import json
+    fake_payload = {"symbol": "BTCUSDT", "price": 50000.0}
+    fake_stream_id = "1718000000000-0"
+    fake_xread = [("price:tick", [(fake_stream_id, {"payload": json.dumps(fake_payload)})])]
+    with patch("shared.state._redis") as mock_redis:
+        mock_redis.xread.return_value = fake_xread
+        from shared.state import subscribe_since
+        payloads, last_id = subscribe_since("price:tick", last_id="0")
+    assert len(payloads) == 1
+    assert payloads[0] == fake_payload
+    assert last_id == fake_stream_id  # Real Redis stream ID, not ISO timestamp
+
+
+def test_subscribe_since_returns_input_id_on_empty():
+    with patch("shared.state._redis") as mock_redis:
+        mock_redis.xread.return_value = []
+        from shared.state import subscribe_since
+        payloads, last_id = subscribe_since("price:tick", last_id="123456-0")
+    assert payloads == []
+    assert last_id == "123456-0"  # unchanged

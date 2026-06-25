@@ -66,3 +66,41 @@ def test_tracker_run_uses_subscribe_since():
             except SystemExit:
                 pass
     mock_sub.assert_called()
+
+
+def test_get_stats_includes_profit_factor():
+    from services.performance.tracker import PerformanceTracker
+    tracker = PerformanceTracker()
+    with patch("services.performance.tracker.set_state"), \
+         patch("services.performance.tracker.publish"):
+        tracker.on_trade({"strategy": "ml", "pnl": 100.0})
+        tracker.on_trade({"strategy": "ml", "pnl": -40.0})
+        tracker.on_trade({"strategy": "ml", "pnl": 60.0})
+    stats = tracker.get_stats("ml")
+    assert "profit_factor" in stats
+
+
+def test_profit_factor_calculation():
+    from services.performance.tracker import PerformanceTracker
+    tracker = PerformanceTracker()
+    with patch("services.performance.tracker.set_state"), \
+         patch("services.performance.tracker.publish"):
+        tracker.on_trade({"strategy": "ml", "pnl": 100.0})   # win +100
+        tracker.on_trade({"strategy": "ml", "pnl": -40.0})   # loss -40
+        tracker.on_trade({"strategy": "ml", "pnl": 60.0})    # win +60
+        tracker.on_trade({"strategy": "ml", "pnl": -20.0})   # loss -20
+    stats = tracker.get_stats("ml")
+    # total wins = 100 + 60 = 160; total losses = 40 + 20 = 60
+    # profit_factor = 160 / 60 = 2.6667 → rounded to 4dp = 2.6667
+    assert abs(stats["profit_factor"] - round(160.0 / 60.0, 4)) < 0.0001
+
+
+def test_profit_factor_zero_when_no_losses():
+    from services.performance.tracker import PerformanceTracker
+    tracker = PerformanceTracker()
+    with patch("services.performance.tracker.set_state"), \
+         patch("services.performance.tracker.publish"):
+        tracker.on_trade({"strategy": "ml", "pnl": 100.0})
+        tracker.on_trade({"strategy": "ml", "pnl": 50.0})
+    stats = tracker.get_stats("ml")
+    assert stats["profit_factor"] == 0.0  # No losses → undefined → 0.0

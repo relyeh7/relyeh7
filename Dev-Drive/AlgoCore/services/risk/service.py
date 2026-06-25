@@ -26,8 +26,6 @@ class RiskService:
         position_value = 0.0
         if isinstance(positions, dict):
             for symbol, pos in positions.items():
-                if not isinstance(pos, dict):
-                    continue
                 price_state = get_state(f"price:{symbol}")
                 price = (float(price_state["price"])
                          if price_state and "price" in price_state
@@ -35,7 +33,7 @@ class RiskService:
                 position_value += price * float(pos.get("size", 0))
 
         total_pnl        = float(perf_ml.get("total_pnl", 0.0)) + float(perf_rl.get("total_pnl", 0.0))
-        initial_equity   = float(getattr(settings, "initial_equity", 10_000.0))
+        initial_equity   = float(settings.initial_equity)
         portfolio_equity = max(initial_equity + total_pnl, 1.0)
         exposure_pct     = round((position_value / portfolio_equity) * 100, 4)
 

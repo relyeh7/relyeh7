@@ -60,3 +60,22 @@ class BinanceClient:
         if "orderId" not in body:
             raise ValueError(f"Binance order failed: {body}")
         return str(body["orderId"])
+
+    def get_order_status(self, order_id: str, symbol: str) -> str:
+        try:
+            params: dict = {"symbol": symbol, "orderId": order_id,
+                            "timestamp": str(int(time.time() * 1000))}
+            params["signature"] = self._sign(params)
+            r = requests.get(
+                self.BASE + "/api/v3/order",
+                params=params, headers=self._headers(), timeout=10,
+            )
+            r.raise_for_status()
+            raw = r.json().get("status", "NEW")
+            if raw == "FILLED":
+                return "filled"
+            if raw in ("CANCELED", "REJECTED", "EXPIRED"):
+                return "cancelled"
+            return "pending"
+        except Exception:
+            return "pending"

@@ -28,3 +28,14 @@ class ExchangeRouter:
         if exchange == "bitget":
             return self._bitget.place_order(symbol, side, price, size)
         return self._binance.place_order(symbol, side, price, size)
+
+    def get_ticker(self, symbol: str) -> float:
+        try:
+            return self._bitget.get_ticker(symbol)
+        except Exception:
+            return self._binance.get_ticker(symbol)
+
+    def get_order_status(self, order_id: str, symbol: str, exchange: str) -> str:
+        if exchange == "binance":
+            return self._binance.get_order_status(order_id, symbol)
+        return self._bitget.get_order_status(order_id, symbol)

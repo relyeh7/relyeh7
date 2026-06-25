@@ -3,7 +3,7 @@ import time
 import websocket
 from datetime import datetime, timezone
 from shared import events
-from shared.state import publish
+from shared.state import publish, set_state
 
 
 class BinanceFeed:
@@ -14,15 +14,18 @@ class BinanceFeed:
 
     def _on_message(self, msg: dict) -> None:
         try:
-            publish(events.PRICE_TICK, {
-                "symbol":    msg["s"],
+            symbol = msg["s"]
+            tick   = {
+                "symbol":    symbol,
                 "price":     float(msg["c"]),
                 "volume":    float(msg["v"]),
                 "timestamp": datetime.fromtimestamp(
                     msg["T"] / 1000, tz=timezone.utc
                 ).isoformat(),
                 "exchange":  "binance",
-            })
+            }
+            set_state(f"price:{symbol}", tick)
+            publish(events.PRICE_TICK, tick)
         except (KeyError, ValueError):
             pass
 

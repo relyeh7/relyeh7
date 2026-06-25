@@ -4,7 +4,7 @@ import threading
 import websocket
 from datetime import datetime, timezone
 from shared import events
-from shared.state import publish
+from shared.state import publish, set_state
 from shared.config import settings
 
 
@@ -21,13 +21,17 @@ class BitgetFeed:
             return
         for item in data:
             try:
-                publish(events.PRICE_TICK, {
-                    "symbol":    item["instId"],
-                    "price":     float(item["last"]),
+                symbol = item["instId"]
+                price  = float(item["last"])
+                tick   = {
+                    "symbol":    symbol,
+                    "price":     price,
                     "volume":    float(item.get("vol24h", 0)),
                     "timestamp": datetime.now(timezone.utc).isoformat(),
                     "exchange":  "bitget",
-                })
+                }
+                set_state(f"price:{symbol}", tick)
+                publish(events.PRICE_TICK, tick)
             except (KeyError, ValueError):
                 pass
 

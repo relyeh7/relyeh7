@@ -2,7 +2,7 @@ import time
 import numpy as np
 from collections import defaultdict
 from shared import events
-from shared.state import set_state, publish, subscribe_once
+from shared.state import set_state, publish, subscribe_since
 
 
 class PerformanceTracker:
@@ -52,7 +52,7 @@ class PerformanceTracker:
     def run(self) -> None:
         last_id = "0"
         while True:
-            trades = subscribe_once(events.TRADE_CLOSED, last_id=last_id)
+            trades, last_id = subscribe_since(events.TRADE_CLOSED, last_id)
             for t in trades:
                 self.on_trade(t)
             time.sleep(1)

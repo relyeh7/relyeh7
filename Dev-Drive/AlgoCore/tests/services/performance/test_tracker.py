@@ -44,3 +44,25 @@ def test_tracker_unknown_strategy_returns_zeros():
         stats = pt.get_stats("nonexistent")
     assert stats["n_trades"] == 0
     assert stats["win_rate"] == 0.0
+
+
+def test_tracker_run_uses_subscribe_since():
+    """Ensure run() calls subscribe_since so cursor tracking is correct."""
+    import services.performance.tracker as mod
+    with patch.object(mod, "subscribe_since", return_value=([], "0")) as mock_sub, \
+         patch.object(mod, "set_state"), \
+         patch.object(mod, "publish"):
+        from services.performance.tracker import PerformanceTracker
+        tracker = PerformanceTracker()
+        # Run one iteration by patching sleep to raise after first call
+        import itertools
+        call_count = itertools.count()
+        def one_shot(*a, **kw):
+            if next(call_count) >= 1:
+                raise SystemExit
+        with patch("time.sleep", side_effect=one_shot):
+            try:
+                tracker.run()
+            except SystemExit:
+                pass
+    mock_sub.assert_called()

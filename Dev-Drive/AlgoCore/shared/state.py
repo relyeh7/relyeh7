@@ -59,3 +59,34 @@ def subscribe_once(channel: str, last_id: str = "$") -> list[dict]:
         return result
     except Exception:
         return []
+
+
+def subscribe_since(channel: str, last_id: str = "0") -> tuple[list[dict], str]:
+    """
+    Read messages from a Redis stream starting after last_id.
+
+    Unlike subscribe_once, this returns the actual Redis stream ID of the
+    last consumed message so callers can maintain a correct cursor across
+    calls. Returns ([], last_id) on error or empty result.
+
+    Args:
+        channel: Redis stream name
+        last_id: Redis stream ID to start after (e.g. "0", "1718000000-0")
+
+    Returns:
+        (payloads, last_stream_id) — last_stream_id is suitable for the
+        next call's last_id argument
+    """
+    if not _redis:
+        return [], last_id
+    try:
+        msgs = _redis.xread({channel: last_id}, block=100, count=20) or []
+        result: list[dict] = []
+        last_seen_id = last_id
+        for _stream, messages in msgs:
+            for msg_id, fields in messages:
+                result.append(json.loads(fields["payload"]))
+                last_seen_id = msg_id
+        return result, last_seen_id
+    except Exception:
+        return [], last_id

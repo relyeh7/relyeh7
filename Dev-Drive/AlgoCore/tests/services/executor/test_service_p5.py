@@ -14,7 +14,7 @@ def test_executor_paper_mode_calls_paper_engine():
     mock_engine = MagicMock()
     mock_engine.run_once.return_value = {"symbol": "BTCUSDT", "side": "buy",
                                           "price": 50050.0, "size": 0.01}
-    with patch.object(_svc_mod, "subscribe_once", return_value=[_decision("BUY")]), \
+    with patch.object(_svc_mod, "subscribe_since", return_value=([_decision("BUY")], "1-0")), \
          patch.object(_svc_mod, "settings") as mock_settings, \
          patch.object(_svc_mod, "publish"):
         mock_settings.paper_trading = True
@@ -29,7 +29,7 @@ def test_executor_live_mode_places_real_order_and_tracks():
     mock_tracker = MagicMock()
     mock_router.place_order.return_value = "ord-123"
 
-    with patch.object(_svc_mod, "subscribe_once", return_value=[_decision("BUY")]), \
+    with patch.object(_svc_mod, "subscribe_since", return_value=([_decision("BUY")], "1-0")), \
          patch.object(_svc_mod, "settings") as mock_settings, \
          patch.object(_svc_mod, "publish"):
         mock_settings.paper_trading = False
@@ -44,7 +44,7 @@ def test_executor_publishes_order_rejected_on_exception():
     mock_router = MagicMock()
     mock_router.place_order.side_effect = Exception("exchange down")
 
-    with patch.object(_svc_mod, "subscribe_once", return_value=[_decision("BUY")]), \
+    with patch.object(_svc_mod, "subscribe_since", return_value=([_decision("BUY")], "1-0")), \
          patch.object(_svc_mod, "settings") as mock_settings, \
          patch.object(_svc_mod, "publish") as mock_pub:
         mock_settings.paper_trading = False

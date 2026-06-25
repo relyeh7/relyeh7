@@ -4,7 +4,7 @@ import logging
 from shared import events
 from shared.config import settings
 from shared.models import OrderState, Side
-from shared.state import subscribe_once, publish
+from shared.state import subscribe_since, publish
 from services.executor.crypto.router import ExchangeRouter
 from services.executor.crypto.tracker import OrderTracker
 from services.paper.engine import PaperEngine
@@ -36,7 +36,7 @@ class ExecutorService:
         if self._risk_gate.is_blocked():
             logger.warning("[Executor] Risk gate BLOCKED — skipping decisions")
             return
-        decisions = subscribe_once(events.ORCH_DECISION, last_id=self._last_id)
+        decisions, self._last_id = subscribe_since(events.ORCH_DECISION, self._last_id)
         for decision in decisions:
             action = decision.get("action", "")
             if action not in _ACTIVE:
@@ -73,9 +73,6 @@ class ExecutorService:
                     "error": str(exc),
                     "symbol": decision.get("symbol", ""),
                 })
-
-        if decisions:
-            self._last_id = decisions[-1].get("timestamp", self._last_id)
 
     def run(self) -> None:
         logger.info(f"[Executor] Starting (paper_trading={settings.paper_trading})")

@@ -2,7 +2,7 @@ import time
 import numpy as np
 from collections import defaultdict
 from shared import events
-from shared.state import set_state, publish, subscribe_once
+from shared.state import set_state, publish, subscribe_since
 
 
 class PerformanceTracker:
@@ -35,24 +35,29 @@ class PerformanceTracker:
         n    = len(pnls)
         if n == 0:
             return {"strategy": strategy, "n_trades": 0, "win_rate": 0.0,
-                    "sharpe": 0.0, "max_dd": 0.0, "total_pnl": 0.0}
-        arr     = np.array(pnls, dtype=float)
-        wins    = float(np.sum(arr > 0))
-        sharpe  = (float(np.mean(arr)) / float(np.std(arr)) * np.sqrt(252 * 96)
-                   if n >= 2 and float(np.std(arr)) > 0 else 0.0)
+                    "sharpe": 0.0, "max_dd": 0.0, "total_pnl": 0.0,
+                    "profit_factor": 0.0}
+        arr          = np.array(pnls, dtype=float)
+        wins         = float(np.sum(arr > 0))
+        total_wins   = float(np.sum(arr[arr > 0])) if wins > 0 else 0.0
+        total_losses = float(np.abs(np.sum(arr[arr < 0]))) if (n - wins) > 0 else 0.0
+        profit_factor = round(total_wins / total_losses, 4) if total_losses > 0 else 0.0
+        sharpe        = (float(np.mean(arr)) / float(np.std(arr)) * np.sqrt(252 * 96)
+                         if n >= 2 and float(np.std(arr)) > 0 else 0.0)
         return {
-            "strategy":  strategy,
-            "n_trades":  n,
-            "win_rate":  round(wins / n, 4),
-            "sharpe":    round(sharpe, 4),
-            "max_dd":    round(self._max_dd.get(strategy, 0.0), 4),
-            "total_pnl": round(float(np.sum(arr)), 6),
+            "strategy":      strategy,
+            "n_trades":      n,
+            "win_rate":      round(wins / n, 4),
+            "sharpe":        round(sharpe, 4),
+            "max_dd":        round(self._max_dd.get(strategy, 0.0), 4),
+            "total_pnl":     round(float(np.sum(arr)), 6),
+            "profit_factor": profit_factor,
         }
 
     def run(self) -> None:
         last_id = "0"
         while True:
-            trades = subscribe_once(events.TRADE_CLOSED, last_id=last_id)
+            trades, last_id = subscribe_since(events.TRADE_CLOSED, last_id)
             for t in trades:
                 self.on_trade(t)
             time.sleep(1)

@@ -33,3 +33,7 @@ class OrchestratorService:
         while True:
             self._run_once()
             time.sleep(self.INTERVAL_SEC)
+
+
+if __name__ == "__main__":
+    OrchestratorService().run()

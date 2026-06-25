@@ -30,6 +30,12 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import redis, os; r = redis.from_url(os.getenv('REDIS_URL', 'redis://redis:6379')); r.ping()"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
 
   sltp:
     build: .
@@ -49,11 +55,47 @@ services:
       redis:
         condition: service_healthy
       risk:
-        condition: service_started
+        condition: service_healthy
 
   performance:
     build: .
     command: python -m services.performance.tracker
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  positions:
+    build: .
+    command: python -m services.positions.manager
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  orchestrator:
+    build: .
+    command: python -m services.orchestrator.service
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  execution_bridge:
+    build: .
+    command: python -m services.execution_bridge.bridge
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  notifications:
+    build: .
+    command: python -m services.notifications.alerts
     restart: unless-stopped
     env_file: .env
     depends_on:

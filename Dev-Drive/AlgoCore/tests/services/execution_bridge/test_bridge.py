@@ -18,7 +18,7 @@ _STOP_DECISION = {
 
 def test_bridge_publishes_on_buy_decision():
     with patch("services.execution_bridge.bridge.publish") as mock_pub, \
-         patch("services.execution_bridge.bridge.subscribe_once", return_value=[_BUY_DECISION]):
+         patch("services.execution_bridge.bridge.subscribe_since", return_value=([_BUY_DECISION], "1")):
         from services.execution_bridge.bridge import ExecutionBridge
         bridge = ExecutionBridge("BTCUSDT", "binance")
         result = bridge._process(_BUY_DECISION)
@@ -55,3 +55,31 @@ def test_bridge_maps_auto_exchange_to_bitget():
         bridge._process(decision)
     _, payload = mock_pub.call_args[0]
     assert payload["exchange"] == "bitget"
+
+
+def test_bridge_run_uses_subscribe_since():
+    """Ensure run() uses subscribe_since — not subscribe_once with ISO-timestamp cursor."""
+    from unittest.mock import patch, MagicMock
+    import itertools
+    import services.execution_bridge.bridge as mod
+
+    call_count = itertools.count()
+
+    with patch.object(mod, "subscribe_since", return_value=([], "0")) as mock_sub, \
+         patch.object(mod, "publish"):
+        from services.execution_bridge.bridge import ExecutionBridge
+        bridge = ExecutionBridge(symbol="BTCUSDT", exchange="bitget")
+
+        def stop_after_one(*a, **kw):
+            if next(call_count) >= 1:
+                raise SystemExit
+        with patch("time.sleep", side_effect=stop_after_one):
+            try:
+                bridge.run()
+            except SystemExit:
+                pass
+
+    mock_sub.assert_called()
+    args = mock_sub.call_args[0]
+    assert len(args) == 2, "subscribe_since must be called with (channel, last_id) positionally"
+    assert args[1] == "0", "Initial last_id must be '0'"

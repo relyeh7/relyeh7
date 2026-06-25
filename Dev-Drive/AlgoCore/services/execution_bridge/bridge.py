@@ -1,6 +1,6 @@
 import time
 import logging
-from shared.state import subscribe_once, publish
+from shared.state import subscribe_since, publish
 from shared import events
 from shared.models import Exchange
 from shared.config import settings
@@ -81,7 +81,7 @@ class ExecutionBridge:
     def run(self):
         """
         Poll orchestrator decisions indefinitely and process them.
-        Blocks with subscribe_once every poll_interval seconds.
+        Blocks with subscribe_since every poll_interval seconds.
         """
         logger.info(
             f"ExecutionBridge started for {self.symbol} on {self.exchange} "
@@ -91,17 +91,13 @@ class ExecutionBridge:
         while True:
             try:
                 # Poll for new orchestrator decisions
-                decisions = subscribe_once(
-                    events.ORCH_DECISION, last_id=self._last_id
+                decisions, self._last_id = subscribe_since(
+                    events.ORCH_DECISION, self._last_id
                 )
 
                 # Process each decision
                 for decision in decisions:
                     self._process(decision)
-
-                # Update last ID for next poll
-                if decisions:
-                    self._last_id = decisions[-1].get("timestamp", self._last_id)
 
                 # Sleep before next poll
                 time.sleep(self.poll_interval)

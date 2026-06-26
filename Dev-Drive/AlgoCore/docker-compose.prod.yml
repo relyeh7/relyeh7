@@ -31,7 +31,7 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "python", "-c", "import redis, os; r = redis.from_url(os.getenv('REDIS_URL', 'redis://redis:6379')); r.ping()"]
+      test: ["CMD", "python", "-c", "import redis, os; r = redis.from_url(os.getenv('REDIS_URL', 'redis://redis:6379')); exit(0 if r.exists('state:risk:state') else 1)"]
       interval: 15s
       timeout: 5s
       retries: 3

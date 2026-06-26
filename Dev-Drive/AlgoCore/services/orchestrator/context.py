@@ -10,6 +10,8 @@ def build_context(last_signal_id: str = "0") -> tuple[str, dict, list[dict], str
         "is_stopped":     bool(risk_raw.get("is_stopped", False)),
         "exposure_pct":   float(risk_raw.get("exposure_pct", 0.0)),
         "daily_pnl_pct":  float(risk_raw.get("daily_pnl_pct", 0.0)),
+        "daily_pnl":      float(risk_raw.get("daily_pnl", 0.0)),
+        "total_equity":   float(risk_raw.get("total_equity", 0.0)),
         "open_positions": int(risk_raw.get("open_positions", 0)),
     }
 
@@ -50,8 +52,8 @@ def build_context(last_signal_id: str = "0") -> tuple[str, dict, list[dict], str
         f"=== MARKET STATE ===\nPrices: {price_summary}\n\n"
         f"=== RISK ===\n"
         f"Drawdown: {risk['drawdown_pct']:.2f}%  Exposure: {risk['exposure_pct']:.1f}%\n"
-        f"Daily P&L: {risk['daily_pnl_pct']:+.2f}%  Stopped: {risk['is_stopped']}\n"
-        f"Open positions: {risk['open_positions']}\n"
+        f"Daily P&L: {risk['daily_pnl_pct']:+.2f}% (${risk['daily_pnl']:+.2f})  Equity: ${risk['total_equity']:.2f}\n"
+        f"Stopped: {risk['is_stopped']}  Open positions: {risk['open_positions']}\n"
         f"{sentiment_section}\n"
         f"=== ML SIGNALS (last 15 min) ===\n{signal_summary}"
         f"Analyze the above and call set_trading_action with your decision."

@@ -52,3 +52,27 @@ def test_pnl_endpoint_returns_daily_pnl_pct():
     assert data["daily_pnl_pct"] == 4.76
     assert data["total_equity"] == 10_500.0
     assert data["daily_pnl"] == 500.0
+
+
+def test_status_endpoint_aggregates_symbol_prices():
+    from fastapi.testclient import TestClient
+
+    def mock_get_state(key):
+        if key == "risk:state":
+            return {"drawdown_pct": 1.5, "is_stopped": False, "exposure_pct": 20.0}
+        if key == "price:BTCUSDT":
+            return {"price": "45000.0"}
+        return None
+
+    with patch("services.dashboard.api.routes.status.get_state", side_effect=mock_get_state), \
+         patch("services.dashboard.api.routes.status.settings") as mock_s:
+        mock_s.trading_symbols = ["BTCUSDT"]
+        from services.dashboard.api.main import app
+        client = TestClient(app)
+        resp = client.get("/status")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "BTCUSDT" in data["prices"], "prices must contain symbols from trading_symbols"
+    assert data["prices"]["BTCUSDT"] == 45000.0
+    assert data["risk"]["drawdown_pct"] == 1.5

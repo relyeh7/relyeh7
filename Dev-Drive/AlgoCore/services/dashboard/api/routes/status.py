@@ -6,7 +6,7 @@ router = APIRouter()
 
 @router.get("/status")
 def get_status():
-    risk = get_state("risk") or {}
+    risk = get_state("risk:state") or {}
     prices = get_state("prices") or {}
     return {
         "services": {"risk": "up", "data": "up"},

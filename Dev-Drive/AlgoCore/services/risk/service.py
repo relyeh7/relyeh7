@@ -16,13 +16,13 @@ class RiskService:
         self._day_start_pnl: float = 0.0
         self._current_day: int = 0
 
-    def _daily_pnl_pct(self, total_pnl: float) -> float:
+    def _daily_pnl_pct(self, total_pnl: float, portfolio_equity: float) -> float:
         today = datetime.now(timezone.utc).toordinal()
         if today != self._current_day:
             self._day_start_pnl = total_pnl
             self._current_day = today
         daily_pnl = total_pnl - self._day_start_pnl
-        return round((daily_pnl / max(float(settings.initial_equity), 1.0)) * 100, 4)
+        return round((daily_pnl / max(portfolio_equity, 1.0)) * 100, 4)
 
     def compute_risk(self) -> dict:
         perf_ml   = get_state("perf:ml") or {}
@@ -48,7 +48,8 @@ class RiskService:
         initial_equity   = float(settings.initial_equity)
         portfolio_equity = max(initial_equity + total_pnl, 1.0)
         exposure_pct     = round((position_value / portfolio_equity) * 100, 4)
-        daily_pnl_pct    = self._daily_pnl_pct(total_pnl)
+        daily_pnl_pct    = self._daily_pnl_pct(total_pnl, portfolio_equity)
+        daily_pnl        = round(total_pnl - self._day_start_pnl, 4)
 
         return {
             "drawdown_pct":   round(drawdown_pct, 4),
@@ -56,6 +57,8 @@ class RiskService:
             "exposure_pct":   exposure_pct,
             "open_positions": open_count,
             "daily_pnl_pct":  daily_pnl_pct,
+            "daily_pnl":      daily_pnl,
+            "total_equity":   round(portfolio_equity, 4),
         }
 
     def update(self) -> dict:

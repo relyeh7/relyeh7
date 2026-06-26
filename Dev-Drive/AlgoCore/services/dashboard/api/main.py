@@ -52,7 +52,7 @@ async def ws_live(websocket: WebSocket):
     try:
         while True:
             payload = {
-                "risk":      get_state("risk")      or {},
+                "risk":      get_state("risk:state") or {},
                 "positions": get_state("positions") or {},
                 "ml_signal": get_state("ml_signal") or {},
                 "sentiment": get_state("sentiment") or {},

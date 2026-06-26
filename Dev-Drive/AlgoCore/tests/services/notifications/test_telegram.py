@@ -39,13 +39,13 @@ def test_alert_subscriber_sends_on_risk_alert():
     def fake_subscribe(channel, last_id="0"):
         call_count[0] += 1
         if call_count[0] == 1 and channel == "risk:alert":
-            return [risk_payload]
-        return []
+            return [risk_payload], "1-0"
+        return [], last_id
 
     mock_client = MagicMock()
     mock_client.send.return_value = True
 
-    with patch("services.notifications.alerts.subscribe_once", side_effect=fake_subscribe), \
+    with patch("services.notifications.alerts.subscribe_since", side_effect=fake_subscribe), \
          patch("services.notifications.alerts.time.sleep"):
         from services.notifications.alerts import AlertSubscriber
         sub = AlertSubscriber(mock_client, max_iterations=1)

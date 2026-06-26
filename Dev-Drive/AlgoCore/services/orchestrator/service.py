@@ -20,7 +20,7 @@ class OrchestratorService:
 
     def _run_once(self) -> None:
         try:
-            context, risk, signals = build_context(self._last_signal_id)
+            context, risk, signals, self._last_signal_id = build_context(self._last_signal_id)
             decision = self._agent.decide(context, risk, signals)
             decision["timestamp"] = datetime.now(timezone.utc).isoformat()
             publish(events.ORCH_DECISION, decision)
@@ -33,3 +33,7 @@ class OrchestratorService:
         while True:
             self._run_once()
             time.sleep(self.INTERVAL_SEC)
+
+
+if __name__ == "__main__":
+    OrchestratorService().run()

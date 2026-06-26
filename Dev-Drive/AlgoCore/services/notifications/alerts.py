@@ -3,7 +3,7 @@ import logging
 from datetime import datetime, timezone, date
 
 from shared import events
-from shared.state import get_state, subscribe_once
+from shared.state import get_state, subscribe_since
 from services.notifications.telegram import TelegramClient
 
 logger = logging.getLogger(__name__)
@@ -80,13 +80,12 @@ class AlertSubscriber:
         """Legacy method: poll and handle multiple event types."""
         for channel in list(self._last_ids.keys()):
             last_id = self._last_ids[channel]
-            payloads = subscribe_once(channel, last_id=last_id)
+            payloads, last_id = subscribe_since(channel, last_id)
             for payload in payloads:
                 msg = self._format(channel, payload)
                 if msg:
                     self._tg.send(msg)
-            if payloads:
-                self._last_ids[channel] = payloads[-1].get("timestamp", last_id)
+            self._last_ids[channel] = last_id
 
     @staticmethod
     def _format(channel: str, payload: dict) -> str | None:
@@ -114,17 +113,17 @@ class AlertSubscriber:
         logger.info("[Alerts] Starting alert subscriber")
         iterations = 0
         while self._max_iter is None or iterations < self._max_iter:
-            risk_alerts = subscribe_once(events.RISK_ALERT, last_id=self._last_id_risk)
+            risk_alerts, self._last_id_risk = subscribe_since(
+                events.RISK_ALERT, self._last_id_risk
+            )
             for alert in risk_alerts:
                 self.on_risk_alert(alert)
-            if risk_alerts:
-                self._last_id_risk = risk_alerts[-1].get("timestamp", self._last_id_risk)
 
-            trades = subscribe_once(events.TRADE_CLOSED, last_id=self._last_id_trade)
+            trades, self._last_id_trade = subscribe_since(
+                events.TRADE_CLOSED, self._last_id_trade
+            )
             for trade in trades:
                 self.on_trade_closed(trade)
-            if trades:
-                self._last_id_trade = trades[-1].get("timestamp", self._last_id_trade)
 
             self._send_daily_summary()
             time.sleep(10)

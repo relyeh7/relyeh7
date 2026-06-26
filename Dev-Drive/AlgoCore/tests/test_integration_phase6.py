@@ -32,12 +32,18 @@ def test_rest_price_feed_poll_once():
 def test_risk_service_compute_and_update():
     perf = {"n_trades": 10, "win_rate": 0.6, "sharpe": 1.2,
             "max_dd": 3.5, "total_pnl": 80.0}
-    with patch("services.risk.service.get_state", return_value=perf), \
+    def mock_get_state(key):
+        if key == "positions":
+            return {}
+        return perf
+
+    with patch("services.risk.service.get_state", side_effect=mock_get_state), \
          patch("services.risk.service.set_state"), \
          patch("services.risk.service.publish") as mock_pub, \
          patch("services.risk.service.settings") as mock_s:
         mock_s.stop_on_drawdown_pct = 6.0
         mock_s.max_exposure_pct     = 90.0
+        mock_s.initial_equity       = 10_000.0
         from services.risk.service import RiskService
         rs = RiskService()
         risk = rs.update()

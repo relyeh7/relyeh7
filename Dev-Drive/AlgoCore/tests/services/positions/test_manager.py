@@ -51,3 +51,33 @@ def test_sell_without_position_is_noop():
         result = pm.on_fill(_make_fill("sell", 50000.0))
     assert result is None
     mock_journal.save.assert_not_called()
+
+
+def test_position_manager_run_uses_subscribe_since():
+    """Ensure run() uses subscribe_since so cursor advances and fills aren't replayed."""
+    import services.positions.manager as mod
+    import itertools
+
+    call_count = itertools.count()
+
+    with patch.object(mod, "subscribe_since", return_value=([], "0")) as mock_sub, \
+         patch.object(mod, "set_state"), \
+         patch.object(mod, "publish"), \
+         patch.object(mod, "get_state", return_value=None):
+        from services.positions.manager import PositionManager
+        journal = MagicMock()
+        pm = PositionManager(journal=journal)
+
+        def stop_after_one(*a, **kw):
+            if next(call_count) >= 1:
+                raise SystemExit
+        with patch("time.sleep", side_effect=stop_after_one):
+            try:
+                pm.run()
+            except SystemExit:
+                pass
+
+    mock_sub.assert_called()
+    # Verify it was called with subscribe_since signature (channel, last_id positional)
+    args = mock_sub.call_args[0]
+    assert len(args) == 2, "subscribe_since must be called with (channel, last_id)"

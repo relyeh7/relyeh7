@@ -1,23 +1,30 @@
-from shared.state import get_state, subscribe_once
+from shared.state import get_state, subscribe_since
+from shared.config import settings
 from shared import events
 
 
-def build_context(last_signal_id: str = "0") -> tuple[str, dict, list[dict]]:
-    risk_raw = get_state("risk") or {}
+def build_context(last_signal_id: str = "0") -> tuple[str, dict, list[dict], str]:
+    risk_raw = get_state("risk:state") or {}
     risk = {
-        "drawdown_pct":   risk_raw.get("drawdown_pct", 0.0),
-        "is_stopped":     risk_raw.get("is_stopped", False),
-        "exposure_pct":   risk_raw.get("exposure_pct", 0.0),
-        "daily_pnl_pct":  risk_raw.get("daily_pnl_pct", 0.0),
-        "open_positions": risk_raw.get("open_positions", 0),
+        "drawdown_pct":   float(risk_raw.get("drawdown_pct", 0.0)),
+        "is_stopped":     bool(risk_raw.get("is_stopped", False)),
+        "exposure_pct":   float(risk_raw.get("exposure_pct", 0.0)),
+        "daily_pnl_pct":  float(risk_raw.get("daily_pnl_pct", 0.0)),
+        "open_positions": int(risk_raw.get("open_positions", 0)),
     }
+
     sentiment_raw = get_state("sentiment") or {}
     fear_greed    = sentiment_raw.get("fear_greed_score", None)
     news_sent     = sentiment_raw.get("news_sentiment", None)
 
-    ml_signals  = subscribe_once(events.ML_SIGNAL, last_id=last_signal_id)
-    prices_raw  = subscribe_once(events.PRICE_TICK, last_id="0")
-    prices      = {p["symbol"]: p["price"] for p in prices_raw[-5:]} if prices_raw else {}
+    ml_signals, last_signal_id = subscribe_since(events.ML_SIGNAL, last_signal_id)
+
+    # Read current prices from state (written by data feeds in Phase 6)
+    prices: dict[str, float] = {}
+    for symbol in settings.trading_symbols:
+        price_state = get_state(f"price:{symbol}")
+        if price_state and "price" in price_state:
+            prices[symbol] = float(price_state["price"])
 
     signal_summary = ""
     for s in ml_signals:
@@ -49,4 +56,4 @@ def build_context(last_signal_id: str = "0") -> tuple[str, dict, list[dict]]:
         f"=== ML SIGNALS (last 15 min) ===\n{signal_summary}"
         f"Analyze the above and call set_trading_action with your decision."
     )
-    return prompt, risk, ml_signals
+    return prompt, risk, ml_signals, last_signal_id

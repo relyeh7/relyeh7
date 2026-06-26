@@ -45,6 +45,7 @@ class Settings(BaseSettings):
     kelly_fraction:   float = 0.25
     feed_poll_sec:    int   = 30
     initial_equity:   float = 10_000.0
+    daily_loss_limit_pct: float = 5.0
 
     # MLflow
     mlflow_tracking_uri: str = "mlruns"

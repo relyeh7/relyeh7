@@ -61,6 +61,7 @@ def test_update_publishes_risk_alert_on_drawdown():
         mock_settings.stop_on_drawdown_pct = 6.0
         mock_settings.max_exposure_pct     = 90.0
         mock_settings.initial_equity       = 10_000.0
+        mock_settings.daily_loss_limit_pct = 5.0
         from services.risk.service import RiskService
         rs = RiskService()
         rs.update()
@@ -83,6 +84,7 @@ def test_update_no_alert_when_drawdown_below_threshold():
         mock_settings.stop_on_drawdown_pct = 6.0
         mock_settings.max_exposure_pct     = 90.0
         mock_settings.initial_equity       = 10_000.0
+        mock_settings.daily_loss_limit_pct = 5.0
         from services.risk.service import RiskService
         rs = RiskService()
         rs.update()
@@ -158,3 +160,73 @@ def test_compute_risk_exposure_zero_when_no_positions():
         rs = RiskService()
         risk = rs.compute_risk()
     assert risk["exposure_pct"] == 0.0
+
+
+def test_compute_risk_includes_daily_pnl_pct():
+    """compute_risk() must return daily_pnl_pct field."""
+    import services.risk.service as mod
+    from unittest.mock import patch
+
+    with patch.object(mod, "get_state", return_value=None), \
+         patch.object(mod, "set_state"), \
+         patch.object(mod, "publish"):
+        from services.risk.service import RiskService
+        rs = RiskService()
+        result = rs.compute_risk()
+
+    assert "daily_pnl_pct" in result, "compute_risk must include daily_pnl_pct"
+    assert isinstance(result["daily_pnl_pct"], float)
+
+
+def test_daily_pnl_pct_resets_at_midnight():
+    """_daily_pnl_pct must reset baseline when UTC day changes."""
+    import services.risk.service as mod
+    from unittest.mock import patch
+    from services.risk.service import RiskService
+
+    with patch.object(mod, "get_state", return_value=None):
+        rs = RiskService()
+        # Simulate day 1: total_pnl=100 (baseline set to 100)
+        rs._current_day = 1
+        rs._day_start_pnl = 100.0
+        # On day 2, baseline should reset to current total_pnl
+        rs._current_day = 0  # force a day change by setting current_day != today
+        pct = rs._daily_pnl_pct(200.0)  # new day, baseline = 200, daily_pnl = 0
+
+    assert pct == 0.0, f"After day reset, daily_pnl_pct must be 0.0, got {pct}"
+
+
+def test_update_publishes_daily_loss_alert():
+    """update() must publish RISK_ALERT when daily loss exceeds daily_loss_limit_pct."""
+    import services.risk.service as mod
+    from unittest.mock import patch
+    from datetime import datetime, timezone
+    from shared import events
+    from services.risk.service import RiskService
+
+    published = []
+
+    def fake_get_state(key):
+        if key == "perf:ml":
+            return {"total_pnl": -600.0, "max_dd": 0.0}
+        elif key == "perf:rl":
+            return {"total_pnl": 0.0, "max_dd": 0.0}
+        return None
+
+    with patch.object(mod, "get_state", side_effect=fake_get_state), \
+         patch.object(mod, "set_state"), \
+         patch.object(mod, "publish", side_effect=lambda ch, p: published.append((ch, p))), \
+         patch.object(mod, "settings") as mock_settings:
+        mock_settings.stop_on_drawdown_pct = 6.0
+        mock_settings.initial_equity = 10_000.0
+        mock_settings.daily_loss_limit_pct = 5.0
+        rs = RiskService()
+        # Set baseline to 0 and current_day to today, so daily_pnl = -600 - 0 = -600
+        today = datetime.now(timezone.utc).toordinal()
+        rs._current_day = today
+        rs._day_start_pnl = 0.0
+        rs.update()
+
+    alert_payloads = [p for ch, p in published if ch == events.RISK_ALERT]
+    daily_loss_alerts = [p for p in alert_payloads if "daily_pnl_pct" in p]
+    assert daily_loss_alerts, "RISK_ALERT with daily_pnl_pct must be published when daily loss exceeds limit"

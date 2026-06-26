@@ -44,6 +44,7 @@ def test_risk_service_compute_and_update():
         mock_s.stop_on_drawdown_pct = 6.0
         mock_s.max_exposure_pct     = 90.0
         mock_s.initial_equity       = 10_000.0
+        mock_s.daily_loss_limit_pct = 5.0
         from services.risk.service import RiskService
         rs = RiskService()
         risk = rs.update()

@@ -18,14 +18,32 @@ class SLTPManager:
         self._sl_pct = stop_loss_pct  if stop_loss_pct   is not None else settings.stop_loss_pct
         self._tp_pct = take_profit_pct if take_profit_pct is not None else settings.take_profit_pct
 
-    def check_position(self, symbol: str, entry_price: float, current_price: float) -> str | None:
+    def check_position(
+        self,
+        symbol: str,
+        entry_price: float,
+        current_price: float,
+        side: str = "buy",
+    ) -> str | None:
+        if side.lower() == "sell":
+            sl_price = entry_price * (1 + self._sl_pct / 100)
+            tp_price = entry_price * (1 - self._tp_pct / 100)
+            if current_price >= sl_price:
+                logger.info(f"[SLTP] {symbol} SHORT SL hit: {current_price:.2f} >= {sl_price:.2f}")
+                return "BUY"
+            if current_price <= tp_price:
+                logger.info(f"[SLTP] {symbol} SHORT TP hit: {current_price:.2f} <= {tp_price:.2f}")
+                return "BUY"
+            return None
+
+        # long (buy) side
         sl_price = entry_price * (1 - self._sl_pct / 100)
         tp_price = entry_price * (1 + self._tp_pct / 100)
         if current_price <= sl_price:
-            logger.info(f"[SLTP] {symbol} SL hit: {current_price:.2f} <= {sl_price:.2f}")
+            logger.info(f"[SLTP] {symbol} LONG SL hit: {current_price:.2f} <= {sl_price:.2f}")
             return "SELL"
         if current_price >= tp_price:
-            logger.info(f"[SLTP] {symbol} TP hit: {current_price:.2f} >= {tp_price:.2f}")
+            logger.info(f"[SLTP] {symbol} LONG TP hit: {current_price:.2f} >= {tp_price:.2f}")
             return "SELL"
         return None
 
@@ -38,15 +56,16 @@ class SLTPManager:
         if symbol not in positions:
             return triggered
 
-        pos = positions[symbol]
-        if pos.get("side", "").lower() != "buy":
+        pos  = positions[symbol]
+        side = pos.get("side", "").lower()
+        if side not in ("buy", "sell"):
             return triggered
 
         entry_price = float(pos.get("entry_price", 0))
         if entry_price <= 0 or current_price <= 0:
             return triggered
 
-        action = self.check_position(symbol, entry_price, current_price)
+        action = self.check_position(symbol, entry_price, current_price, side)
         if action:
             decision = {
                 "action":     action,

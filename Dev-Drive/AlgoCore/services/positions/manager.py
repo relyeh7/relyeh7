@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 
 from shared.models import Trade, Position, Side
 from shared import events
-from shared.state import get_state, set_state, publish, subscribe_once
+from shared.state import get_state, set_state, publish, subscribe_since
 from services.journal.trade_journal import TradeJournal
 
 _FEE = 0.001
@@ -67,7 +67,7 @@ class PositionManager:
     def run(self) -> None:
         last_id = "0"
         while True:
-            fills = subscribe_once(events.ORDER_FILLED, last_id=last_id)
+            fills, last_id = subscribe_since(events.ORDER_FILLED, last_id)
             for f in fills:
                 self.on_fill(f)
             time.sleep(1)

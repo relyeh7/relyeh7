@@ -17,13 +17,17 @@ def test_compute_risk_returns_expected_keys():
          patch("services.risk.service.settings") as mock_s:
         mock_s.stop_on_drawdown_pct = 6.0
         mock_s.initial_equity       = 10_000.0
+        mock_s.daily_loss_limit_pct = 5.0
         from services.risk.service import RiskService
         rs = RiskService()
         risk = rs.compute_risk()
-    assert "drawdown_pct" in risk
-    assert "is_stopped" in risk
-    assert "exposure_pct" in risk
+    assert "drawdown_pct"   in risk
+    assert "is_stopped"     in risk
+    assert "exposure_pct"   in risk
     assert "open_positions" in risk
+    assert "daily_pnl_pct"  in risk
+    assert "daily_pnl"      in risk
+    assert "total_equity"   in risk
 
 
 def test_compute_risk_stopped_when_drawdown_exceeds_threshold():
@@ -186,12 +190,11 @@ def test_daily_pnl_pct_resets_at_midnight():
 
     with patch.object(mod, "get_state", return_value=None):
         rs = RiskService()
-        # Simulate day 1: total_pnl=100 (baseline set to 100)
         rs._current_day = 1
         rs._day_start_pnl = 100.0
-        # On day 2, baseline should reset to current total_pnl
         rs._current_day = 0  # force a day change by setting current_day != today
-        pct = rs._daily_pnl_pct(200.0)  # new day, baseline = 200, daily_pnl = 0
+        # portfolio_equity = initial_equity(10_000) + total_pnl(200) = 10_200
+        pct = rs._daily_pnl_pct(200.0, 10_200.0)  # new day: baseline = 200, daily_pnl = 0
 
     assert pct == 0.0, f"After day reset, daily_pnl_pct must be 0.0, got {pct}"
 
@@ -230,3 +233,37 @@ def test_update_publishes_daily_loss_alert():
     alert_payloads = [p for ch, p in published if ch == events.RISK_ALERT]
     daily_loss_alerts = [p for p in alert_payloads if "daily_pnl_pct" in p]
     assert daily_loss_alerts, "RISK_ALERT with daily_pnl_pct must be published when daily loss exceeds limit"
+
+
+def test_compute_risk_total_equity_and_daily_pnl():
+    """compute_risk() total_equity == portfolio_equity; daily_pnl == pnl since day start."""
+    import services.risk.service as mod
+    from unittest.mock import patch
+    from datetime import datetime, timezone
+
+    def mock_get_state(key):
+        if key == "positions":
+            return {}
+        if key == "perf:ml":
+            return {"max_dd": 0.0, "total_pnl": 500.0}
+        return {"max_dd": 0.0, "total_pnl": 0.0}
+
+    with patch("services.risk.service.get_state", side_effect=mock_get_state), \
+         patch("services.risk.service.settings") as mock_s:
+        mock_s.stop_on_drawdown_pct = 6.0
+        mock_s.initial_equity       = 10_000.0
+        mock_s.daily_loss_limit_pct = 5.0
+        from services.risk.service import RiskService
+        rs = RiskService()
+        # Pre-seed baseline at 0 for today so daily_pnl = 500 - 0 = 500
+        today = datetime.now(timezone.utc).toordinal()
+        rs._current_day = today
+        rs._day_start_pnl = 0.0
+        risk = rs.compute_risk()
+
+    # portfolio_equity = 10_000 + 500 = 10_500
+    assert risk["total_equity"] == 10_500.0
+    # day_start_pnl=0 (pre-seeded), daily_pnl = 500 - 0 = 500
+    assert risk["daily_pnl"] == 500.0
+    assert isinstance(risk["total_equity"], float)
+    assert isinstance(risk["daily_pnl"], float)

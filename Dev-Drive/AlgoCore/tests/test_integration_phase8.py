@@ -77,7 +77,7 @@ def test_docker_compose_prod_has_all_services():
     """Ensure docker-compose.prod.yml has all 11 expected services."""
     import yaml, pathlib
 
-    path = pathlib.Path("H:/Dev-Drive/AlgoCore/docker-compose.prod.yml")
+    path = pathlib.Path(__file__).parents[1] / "docker-compose.prod.yml"
     assert path.exists(), "docker-compose.prod.yml must exist"
     data = yaml.safe_load(path.read_text())
     services = set(data["services"].keys())

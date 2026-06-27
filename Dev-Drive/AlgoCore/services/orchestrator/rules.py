@@ -7,7 +7,11 @@ def apply_rules(risk: dict, signals: list[dict]) -> dict:
     daily_pnl_pct = float(risk.get("daily_pnl_pct", 0.0))
 
     if stopped or dd >= settings.stop_on_drawdown_pct:
-        return _decision("STOP_ALL", "Drawdown ≥6% or system stopped.", 0.99)
+        return _decision(
+            "STOP_ALL",
+            f"Drawdown ≥{settings.stop_on_drawdown_pct:.0f}% or system stopped.",
+            0.99,
+        )
     if daily_pnl_pct <= -settings.daily_loss_limit_pct:
         return _decision(
             "STOP_ALL",

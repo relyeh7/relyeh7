@@ -1,9 +1,12 @@
 def apply_rules(risk: dict, signals: list[dict]) -> dict:
-    dd      = float(risk.get("drawdown_pct", 0))
-    stopped = bool(risk.get("is_stopped", False))
+    dd            = float(risk.get("drawdown_pct", 0))
+    stopped       = bool(risk.get("is_stopped", False))
+    daily_pnl_pct = float(risk.get("daily_pnl_pct", 0.0))
 
     if stopped or dd >= 6.0:
         return _decision("STOP_ALL", "Drawdown ≥6% or system stopped.", 0.99)
+    if daily_pnl_pct <= -5.0:
+        return _decision("STOP_ALL", f"Daily loss {abs(daily_pnl_pct):.2f}% ≥5% limit.", 0.99)
     if dd >= 4.0:
         return _decision("PAUSE_STRATEGY", "Drawdown ≥4%: pausing ML/RL strategies.", 0.9)
     if dd >= 2.0:

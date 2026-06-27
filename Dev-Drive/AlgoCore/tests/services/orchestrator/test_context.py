@@ -61,3 +61,29 @@ def test_build_context_reads_price_from_state_not_stream():
     assert events.PRICE_TICK not in subscribe_channels, (
         "build_context must not subscribe to PRICE_TICK stream — read price:{symbol} state instead"
     )
+
+
+def test_build_context_prompt_includes_daily_pnl_and_total_equity():
+    """Prompt must show daily_pnl absolute and total_equity — Phase 11."""
+    import services.orchestrator.context as mod
+
+    def mock_get_state(key):
+        if key == "risk:state":
+            return {
+                "drawdown_pct": 1.0, "is_stopped": False, "exposure_pct": 20.0,
+                "daily_pnl_pct": -1.5, "daily_pnl": -150.0, "total_equity": 9_850.0,
+                "open_positions": 1,
+            }
+        return None
+
+    with patch.object(mod, "get_state", side_effect=mock_get_state), \
+         patch.object(mod, "subscribe_since", return_value=([], "0")):
+        from services.orchestrator.context import build_context
+        prompt, risk, _, _ = build_context("0")
+
+    assert "daily_pnl" in risk, "risk dict must include daily_pnl"
+    assert "total_equity" in risk, "risk dict must include total_equity"
+    assert risk["daily_pnl"] == -150.0
+    assert risk["total_equity"] == 9_850.0
+    assert "-150.00" in prompt, "prompt must show daily_pnl absolute value"
+    assert "9850.00" in prompt, "prompt must show total_equity"

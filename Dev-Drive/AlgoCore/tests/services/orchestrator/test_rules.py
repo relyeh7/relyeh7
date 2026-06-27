@@ -25,3 +25,12 @@ def test_rules_buy_on_high_confidence_ml_signal():
     signals = [{"action": "BUY", "confidence": 0.85, "symbol": "ETHUSDT"}]
     decision = apply_rules(risk, signals)
     assert decision["action"] == "BUY"
+
+
+def test_rules_stop_all_on_daily_loss():
+    from services.orchestrator.rules import apply_rules
+    risk = {"drawdown_pct": 1.0, "is_stopped": False,
+            "exposure_pct": 20.0, "daily_pnl_pct": -5.5}
+    decision = apply_rules(risk, [])
+    assert decision["action"] == "STOP_ALL"
+    assert "daily" in decision["reason"].lower() or "loss" in decision["reason"].lower()

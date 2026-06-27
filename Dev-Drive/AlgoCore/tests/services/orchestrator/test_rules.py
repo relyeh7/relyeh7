@@ -34,3 +34,20 @@ def test_rules_stop_all_on_daily_loss():
     decision = apply_rules(risk, [])
     assert decision["action"] == "STOP_ALL"
     assert "daily" in decision["reason"].lower() or "loss" in decision["reason"].lower()
+
+
+def test_rules_respects_stop_on_drawdown_pct_from_settings():
+    """apply_rules stop threshold must come from settings, not a hardcoded literal."""
+    from services.orchestrator.rules import apply_rules
+    from unittest.mock import patch
+
+    with patch("services.orchestrator.rules.settings") as mock_s:
+        mock_s.stop_on_drawdown_pct = 3.0
+        mock_s.daily_loss_limit_pct = 5.0
+        risk = {"drawdown_pct": 3.5, "is_stopped": False,
+                "exposure_pct": 10.0, "daily_pnl_pct": 0.0}
+        decision = apply_rules(risk, [])
+
+    assert decision["action"] == "STOP_ALL", (
+        "drawdown_pct=3.5 must trigger STOP_ALL when stop_on_drawdown_pct=3.0 via settings"
+    )

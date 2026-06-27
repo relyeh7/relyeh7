@@ -80,3 +80,21 @@ def test_metrics_includes_daily_pnl_pct():
     assert resp.status_code == 200
     assert "algocore_daily_pnl_pct" in resp.text
     assert "-2.3" in resp.text
+
+
+def test_metrics_includes_exposure_pct_and_is_stopped():
+    risk_state = {
+        "drawdown_pct": 0.5, "daily_pnl_pct": 1.0, "open_positions": 1,
+        "exposure_pct": 35.0, "is_stopped": True,
+    }
+    with patch("services.dashboard.api.routes.metrics.get_state", return_value=risk_state):
+        from services.dashboard.api.main import app
+        client = TestClient(app)
+        resp = client.get("/metrics")
+    assert resp.status_code == 200
+    assert "algocore_exposure_pct 35.0" in resp.text, (
+        "metrics must include algocore_exposure_pct line"
+    )
+    assert "algocore_is_stopped 1" in resp.text, (
+        "metrics must include algocore_is_stopped line; True → 1"
+    )

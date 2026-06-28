@@ -112,3 +112,36 @@ def test_status_via_shared_client_returns_expected_structure():
     assert "risk" in data
     assert "prices" in data
     assert isinstance(data["prices"], dict)
+
+
+def test_status_services_risk_up_when_risk_state_present():
+    from fastapi.testclient import TestClient
+
+    def mock_get_state(key):
+        if key == "risk:state":
+            return {"drawdown_pct": 0.5, "is_stopped": False, "exposure_pct": 10.0}
+        return None
+
+    with patch("services.dashboard.api.routes.status.get_state", side_effect=mock_get_state):
+        from services.dashboard.api.main import app
+        client = TestClient(app)
+        resp = client.get("/status")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["services"]["risk"] == "up", "risk must be 'up' when risk:state is present"
+    assert data["services"]["data"] == "down", "data must be 'down' when no symbol has price state"
+
+
+def test_status_services_down_when_no_state():
+    from fastapi.testclient import TestClient
+
+    with patch("services.dashboard.api.routes.status.get_state", return_value=None):
+        from services.dashboard.api.main import app
+        client = TestClient(app)
+        resp = client.get("/status")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["services"]["risk"] == "down", "risk must be 'down' when risk:state is None"
+    assert data["services"]["data"] == "down", "data must be 'down' when no price state"

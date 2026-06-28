@@ -43,7 +43,8 @@ app.include_router(metrics_router)
 
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    from shared.state import redis_alive
+    return {"status": "ok", "redis": "up" if redis_alive() else "down"}
 
 
 @app.websocket("/ws/live")

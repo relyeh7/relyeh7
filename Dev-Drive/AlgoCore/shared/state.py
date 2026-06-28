@@ -90,3 +90,14 @@ def subscribe_since(channel: str, last_id: str = "0") -> tuple[list[dict], str]:
         return result, last_seen_id
     except Exception:
         return [], last_id
+
+
+def redis_alive() -> bool:
+    """Return True if the Redis connection is healthy (ping succeeds)."""
+    if not _redis:
+        return False
+    try:
+        _redis.ping()
+        return True
+    except Exception:
+        return False

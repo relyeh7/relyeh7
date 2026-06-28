@@ -85,3 +85,15 @@ def test_subscribe_since_returns_input_id_on_empty():
         payloads, last_id = subscribe_since("price:tick", last_id="123456-0")
     assert payloads == []
     assert last_id == "123456-0"  # unchanged
+
+
+def test_redis_alive_returns_true_when_ping_succeeds(patch_redis):
+    from shared.state import redis_alive
+    patch_redis.ping.return_value = True
+    assert redis_alive() is True
+
+
+def test_redis_alive_returns_false_when_ping_raises(patch_redis):
+    from shared.state import redis_alive
+    patch_redis.ping.side_effect = Exception("connection refused")
+    assert redis_alive() is False

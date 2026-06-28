@@ -7,14 +7,18 @@ router = APIRouter()
 
 @router.get("/status")
 def get_status():
-    risk = get_state("risk:state") or {}
+    risk_raw = get_state("risk:state")
+    risk = risk_raw or {}
     prices: dict[str, float] = {}
     for symbol in settings.trading_symbols:
         price_state = get_state(f"price:{symbol}")
         if price_state and "price" in price_state:
             prices[symbol] = float(price_state["price"])
     return {
-        "services": {"risk": "up", "data": "up"},
+        "services": {
+            "risk": "up" if risk_raw is not None else "down",
+            "data": "up" if prices else "down",
+        },
         "risk": {
             "drawdown_pct": risk.get("drawdown_pct", 0.0),
             "is_stopped": risk.get("is_stopped", False),

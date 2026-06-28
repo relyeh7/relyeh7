@@ -115,3 +115,23 @@ def test_health_endpoint_includes_redis_status():
     assert "redis" in data, "/health must include 'redis' field"
     assert data["redis"] in ("up", "down"), "redis field must be 'up' or 'down'"
     assert data["status"] == "ok"
+
+
+def test_metrics_includes_prometheus_type_and_help_headers():
+    with patch("services.dashboard.api.routes.metrics.get_state", return_value=None):
+        from services.dashboard.api.main import app
+        client = TestClient(app)
+        resp = client.get("/metrics")
+    assert resp.status_code == 200
+    assert "# TYPE algocore_drawdown_pct gauge" in resp.text, (
+        "/metrics must include Prometheus # TYPE header for algocore_drawdown_pct"
+    )
+    assert "# HELP algocore_drawdown_pct" in resp.text, (
+        "/metrics must include Prometheus # HELP header for algocore_drawdown_pct"
+    )
+    assert "# TYPE algocore_ml_trades_total counter" in resp.text, (
+        "algocore_ml_trades_total must be typed as counter"
+    )
+    assert "# TYPE algocore_is_stopped gauge" in resp.text, (
+        "algocore_is_stopped must be typed as gauge"
+    )

@@ -14,6 +14,8 @@ def get_metrics() -> str:
         f'algocore_drawdown_pct {risk.get("drawdown_pct", 0.0)}',
         f'algocore_daily_pnl_pct {risk.get("daily_pnl_pct", 0.0)}',
         f'algocore_positions_open {risk.get("open_positions", 0)}',
+        f'algocore_exposure_pct {risk.get("exposure_pct", 0.0)}',
+        f'algocore_is_stopped {1 if risk.get("is_stopped", False) else 0}',
         f'algocore_ml_trades_total {perf_ml.get("n_trades", 0)}',
         f'algocore_ml_win_rate {perf_ml.get("win_rate", 0.0)}',
         f'algocore_ml_total_pnl {perf_ml.get("total_pnl", 0.0)}',

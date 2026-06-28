@@ -51,3 +51,24 @@ def test_rules_respects_stop_on_drawdown_pct_from_settings():
     assert decision["action"] == "STOP_ALL", (
         "drawdown_pct=3.5 must trigger STOP_ALL when stop_on_drawdown_pct=3.0 via settings"
     )
+
+
+def test_rules_stop_reason_reflects_settings_threshold():
+    """Drawdown STOP_ALL reason string must interpolate settings.stop_on_drawdown_pct."""
+    from services.orchestrator.rules import apply_rules
+    from unittest.mock import patch
+
+    with patch("services.orchestrator.rules.settings") as mock_s:
+        mock_s.stop_on_drawdown_pct = 4.0
+        mock_s.daily_loss_limit_pct = 5.0
+        risk = {"drawdown_pct": 5.0, "is_stopped": False,
+                "exposure_pct": 10.0, "daily_pnl_pct": 0.0}
+        decision = apply_rules(risk, [])
+
+    assert decision["action"] == "STOP_ALL"
+    assert "4" in decision["reason"], (
+        "reason must contain the custom stop_on_drawdown_pct value (4), not hardcoded '6'"
+    )
+    assert "6" not in decision["reason"], (
+        "reason must not contain the old hardcoded '6'"
+    )

@@ -4,12 +4,9 @@ import shared.config as config_mod
 
 
 def _client_with_routes_mocked():
-    with patch("services.dashboard.api.routes.positions.get_state", return_value={}), \
-         patch("services.dashboard.api.routes.pnl.get_state", return_value={}), \
-         patch("services.dashboard.api.routes.status.get_state", return_value={}), \
-         patch("services.dashboard.api.routes.performance.get_state", return_value=None), \
-         patch("services.dashboard.api.routes.metrics.get_state", return_value=None), \
-         patch("services.dashboard.api.routes.trades.TradeJournal") as MockJournal:
+    # Patches here exit when the function returns (before any request is made).
+    # Only patch what is actually needed: TradeJournal prevents a real DB call.
+    with patch("services.dashboard.api.routes.trades.TradeJournal") as MockJournal:
         MockJournal.return_value.get_recent.return_value = []
         from services.dashboard.api.main import app
         return TestClient(app, raise_server_exceptions=False)
@@ -135,3 +132,19 @@ def test_metrics_includes_prometheus_type_and_help_headers():
     assert "# TYPE algocore_is_stopped gauge" in resp.text, (
         "algocore_is_stopped must be typed as gauge"
     )
+
+
+def test_health_redis_down_returns_ok_with_down_status():
+    """GET /health must return 200 with redis='down' when Redis is unavailable."""
+    import shared.state as state_mod
+
+    with patch.object(state_mod, "_redis") as mock_redis:
+        mock_redis.ping.side_effect = Exception("connection refused")
+        from services.dashboard.api.main import app
+        client = TestClient(app)
+        resp = client.get("/health")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "ok"
+    assert data["redis"] == "down"

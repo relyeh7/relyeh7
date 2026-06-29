@@ -54,3 +54,41 @@ def test_alert_subscriber_sends_on_risk_alert():
     assert mock_client.send.called
     sent_msg = mock_client.send.call_args[0][0]
     assert "STOP" in sent_msg or "risk" in sent_msg.lower()
+
+
+def test_telegram_client_no_args_reads_from_settings():
+    """TelegramClient() with no args must read token/chat_id from settings."""
+    import services.notifications.telegram as tg_mod
+
+    with patch.object(tg_mod, "settings") as mock_s:
+        mock_s.telegram_bot_token = "settings-token"
+        mock_s.telegram_chat_id   = "settings-chat"
+        client = tg_mod.TelegramClient()
+
+    assert client._token   == "settings-token"
+    assert client._chat_id == "settings-chat"
+
+
+def test_telegram_client_explicit_args_override_settings():
+    """Explicit token/chat_id must override settings values."""
+    from services.notifications.telegram import TelegramClient
+    client = TelegramClient("explicit-token", "explicit-chat")
+    assert client._token   == "explicit-token"
+    assert client._chat_id == "explicit-chat"
+
+
+def test_alert_subscriber_default_client_does_not_raise():
+    """AlertSubscriber() without explicit client must not raise TypeError."""
+    import services.notifications.telegram as tg_mod
+
+    with patch.object(tg_mod, "settings") as mock_s:
+        mock_s.telegram_bot_token = ""
+        mock_s.telegram_chat_id   = ""
+        from services.notifications.alerts import AlertSubscriber
+        try:
+            sub = AlertSubscriber()
+        except TypeError as exc:
+            raise AssertionError(
+                f"AlertSubscriber() must not raise TypeError, got: {exc}"
+            ) from exc
+    assert sub._tg is not None

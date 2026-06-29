@@ -10,7 +10,7 @@ from services.dashboard.api.routes.trades import router as trades_router
 from services.dashboard.api.routes.performance import router as performance_router
 from services.dashboard.api.routes.metrics import router as metrics_router
 from shared.config import settings
-from shared.state import get_state
+from shared.state import get_state, redis_alive
 
 app = FastAPI(title="AlgoCore Dashboard", version="0.5.0")
 
@@ -43,7 +43,6 @@ app.include_router(metrics_router)
 
 @app.get("/health")
 def health():
-    from shared.state import redis_alive
     return {"status": "ok", "redis": "up" if redis_alive() else "down"}
 
 

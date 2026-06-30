@@ -9,18 +9,35 @@ from shared.state import get_state, set_state, publish
 logger = logging.getLogger(__name__)
 
 
+_STATE_KEY = "risk:daily_baseline"
+
+
 class RiskService:
     _POLL_SEC = 10
 
     def __init__(self) -> None:
         self._day_start_pnl: float = 0.0
         self._current_day: int = 0
+        self._load_baseline()
+
+    def _load_baseline(self) -> None:
+        saved = get_state(_STATE_KEY)
+        if saved:
+            self._day_start_pnl = float(saved.get("day_start_pnl", 0.0))
+            self._current_day   = int(saved.get("current_day", 0))
+
+    def _save_baseline(self) -> None:
+        set_state(_STATE_KEY, {
+            "day_start_pnl": self._day_start_pnl,
+            "current_day":   self._current_day,
+        })
 
     def _daily_pnl_pct(self, total_pnl: float, portfolio_equity: float) -> float:
         today = datetime.now(timezone.utc).toordinal()
         if today != self._current_day:
             self._day_start_pnl = total_pnl
             self._current_day = today
+            self._save_baseline()
         daily_pnl = total_pnl - self._day_start_pnl
         return round((daily_pnl / max(portfolio_equity, 1.0)) * 100, 4)
 

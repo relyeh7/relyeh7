@@ -105,6 +105,41 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  positions:
+    build:
+      context: .
+      args:
+        SERVICE_MODULE: services.positions.manager
+    env_file: .env
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  sltp:
+    build:
+      context: .
+      args:
+        SERVICE_MODULE: services.sltp.manager
+    env_file: .env
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  performance:
+    build:
+      context: .
+      args:
+        SERVICE_MODULE: services.performance.tracker
+    env_file: .env
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
   execution-bridge:
     build:
       context: .

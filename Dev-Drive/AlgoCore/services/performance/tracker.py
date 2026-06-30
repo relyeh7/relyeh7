@@ -2,7 +2,9 @@ import time
 import numpy as np
 from collections import defaultdict
 from shared import events
-from shared.state import set_state, publish, subscribe_since
+from shared.state import get_state, set_state, publish, subscribe_since
+
+_SNAPSHOT_KEY = "perf:snapshot"
 
 
 class PerformanceTracker:
@@ -11,6 +13,29 @@ class PerformanceTracker:
         self._equity: dict[str, float]       = defaultdict(lambda: 10_000.0)
         self._max_eq: dict[str, float]       = defaultdict(lambda: 10_000.0)
         self._max_dd: dict[str, float]       = defaultdict(float)
+        self._load_snapshot()
+
+    def _load_snapshot(self) -> None:
+        snap = get_state(_SNAPSHOT_KEY)
+        if not snap:
+            return
+        for strat, data in snap.items():
+            self._pnls[strat]   = data.get("pnls", [])
+            self._equity[strat] = float(data.get("equity", 10_000.0))
+            self._max_eq[strat] = float(data.get("max_eq", 10_000.0))
+            self._max_dd[strat] = float(data.get("max_dd", 0.0))
+
+    def _save_snapshot(self) -> None:
+        snap = {
+            strat: {
+                "pnls":   self._pnls[strat],
+                "equity": self._equity[strat],
+                "max_eq": self._max_eq[strat],
+                "max_dd": self._max_dd[strat],
+            }
+            for strat in self._pnls
+        }
+        set_state(_SNAPSHOT_KEY, snap)
 
     def on_trade(self, trade: dict) -> dict:
         strat = trade.get("strategy", "unknown")
@@ -28,6 +53,7 @@ class PerformanceTracker:
         stats = self.get_stats(strat)
         set_state(f"perf:{strat}", stats)
         publish(events.PERF_UPDATE, stats)
+        self._save_snapshot()
         return stats
 
     def get_stats(self, strategy: str) -> dict:

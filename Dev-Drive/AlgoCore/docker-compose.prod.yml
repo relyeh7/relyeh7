@@ -13,6 +13,48 @@ services:
       timeout: 5s
       retries: 5
 
+  postgres:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: algocore
+      POSTGRES_PASSWORD: algocore
+      POSTGRES_DB: algocore
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U algocore"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  ml:
+    build: .
+    command: python -m services.ml.service
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  rl:
+    build: .
+    command: python -m services.ml.rl_service
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  sentiment:
+    build: .
+    command: python -m services.sentiment.service
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      redis:
+        condition: service_healthy
+
   data:
     build: .
     command: python -m services.data.service
@@ -74,6 +116,8 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+      postgres:
+        condition: service_healthy
 
   orchestrator:
     build: .
@@ -112,6 +156,8 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+      postgres:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
       interval: 30s
@@ -121,3 +167,4 @@ services:
 
 volumes:
   redis_data:
+  pg_data:

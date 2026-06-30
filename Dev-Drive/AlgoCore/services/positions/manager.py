@@ -13,14 +13,20 @@ class PositionManager:
     def __init__(self, journal: TradeJournal):
         self._journal    = journal
         self._positions: dict[str, Position] = {}
+        self._journal.ensure_positions_table()
         self._load_from_redis()
 
     def _load_from_redis(self) -> None:
         raw = get_state("positions")
-        if not raw:
+        if raw and isinstance(raw, dict):
+            for symbol, data in raw.items():
+                self._positions[symbol] = Position.model_validate(data)
             return
-        for symbol, data in (raw if isinstance(raw, dict) else {}).items():
-            self._positions[symbol] = Position.model_validate(data)
+        # Redis miss — recover from PostgreSQL
+        for symbol, pos in self._journal.get_open_positions():
+            self._positions[symbol] = pos
+        if self._positions:
+            self._save_to_redis()
 
     def _save_to_redis(self) -> None:
         payload = {k: v.model_dump(mode="json") for k, v in self._positions.items()}
@@ -36,12 +42,14 @@ class PositionManager:
         ts       = datetime.now(timezone.utc)
 
         if side == "buy":
-            self._positions[symbol] = Position(
+            pos = Position(
                 symbol=symbol, side=Side.BUY,
                 entry_price=price, size=size,
                 strategy=strategy, opened_at=ts,
             )
+            self._positions[symbol] = pos
             self._save_to_redis()
+            self._journal.save_position(symbol, pos)
             return None
 
         if side == "sell" and symbol in self._positions:
@@ -55,6 +63,7 @@ class PositionManager:
                 opened_at=pos.opened_at, closed_at=ts,
             )
             self._journal.save(trade)
+            self._journal.delete_position(symbol)
             publish(events.TRADE_CLOSED, trade.model_dump(mode="json"))
             self._save_to_redis()
             return trade

@@ -1,3 +1,5 @@
+import signal
+import sys
 import time
 import logging
 from datetime import datetime, timezone
@@ -99,7 +101,15 @@ class RiskService:
         )
         return risk
 
+    def _register_shutdown(self) -> None:
+        def _handler(signum, frame):
+            logger.info("[RiskService] SIGTERM received — flushing baseline")
+            self._save_baseline()
+            sys.exit(0)
+        signal.signal(signal.SIGTERM, _handler)
+
     def run(self) -> None:
+        self._register_shutdown()
         logger.info("[RiskService] Starting")
         while True:
             try:

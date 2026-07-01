@@ -1,3 +1,5 @@
+import signal
+import sys
 import time
 from datetime import datetime, timezone
 
@@ -73,7 +75,14 @@ class PositionManager:
     def get_positions(self) -> dict[str, Position]:
         return dict(self._positions)
 
+    def _register_shutdown(self) -> None:
+        def _handler(signum, frame):
+            self._save_to_redis()
+            sys.exit(0)
+        signal.signal(signal.SIGTERM, _handler)
+
     def run(self) -> None:
+        self._register_shutdown()
         last_id = "0"
         while True:
             fills, last_id = subscribe_since(events.ORDER_FILLED, last_id)

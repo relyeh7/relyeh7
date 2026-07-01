@@ -1,3 +1,5 @@
+import signal
+import sys
 import time
 import numpy as np
 from collections import defaultdict
@@ -80,7 +82,14 @@ class PerformanceTracker:
             "profit_factor": profit_factor,
         }
 
+    def _register_shutdown(self) -> None:
+        def _handler(signum, frame):
+            self._save_snapshot()
+            sys.exit(0)
+        signal.signal(signal.SIGTERM, _handler)
+
     def run(self) -> None:
+        self._register_shutdown()
         last_id = "0"
         while True:
             trades, last_id = subscribe_since(events.TRADE_CLOSED, last_id)

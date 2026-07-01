@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 
 from shared import events
 from shared.config import settings
+from shared.health import start_health_server
 from shared.state import get_state, set_state, publish
 
 logger = logging.getLogger(__name__)
@@ -110,6 +111,7 @@ class RiskService:
 
     def run(self) -> None:
         self._register_shutdown()
+        start_health_server(8081)
         logger.info("[RiskService] Starting")
         while True:
             try:

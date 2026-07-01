@@ -4,6 +4,7 @@ import time
 import numpy as np
 from collections import defaultdict
 from shared import events
+from shared.health import start_health_server
 from shared.state import get_state, set_state, publish, subscribe_since
 
 _SNAPSHOT_KEY = "perf:snapshot"
@@ -90,6 +91,7 @@ class PerformanceTracker:
 
     def run(self) -> None:
         self._register_shutdown()
+        start_health_server(8083)
         last_id = "0"
         while True:
             trades, last_id = subscribe_since(events.TRADE_CLOSED, last_id)

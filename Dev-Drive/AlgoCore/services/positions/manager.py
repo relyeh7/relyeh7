@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 
 from shared.models import Trade, Position, Side
 from shared import events
+from shared.health import start_health_server
 from shared.state import get_state, set_state, publish, subscribe_since
 from services.journal.trade_journal import TradeJournal
 
@@ -83,6 +84,7 @@ class PositionManager:
 
     def run(self) -> None:
         self._register_shutdown()
+        start_health_server(8082)
         last_id = "0"
         while True:
             fills, last_id = subscribe_since(events.ORDER_FILLED, last_id)

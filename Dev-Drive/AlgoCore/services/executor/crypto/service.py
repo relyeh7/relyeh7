@@ -13,7 +13,8 @@ from services.sizing.kelly import KellySizer
 
 logger = logging.getLogger(__name__)
 
-_ACTIVE = {"BUY", "SELL"}
+_ACTIVE   = {"BUY", "SELL"}
+_SHUTDOWN = {"CANCEL_ALL"}
 
 
 class ExecutorService:
@@ -36,9 +37,13 @@ class ExecutorService:
         if self._risk_gate.is_blocked():
             logger.warning("[Executor] Risk gate BLOCKED — skipping decisions")
             return
-        decisions, self._last_id = subscribe_since(events.ORCH_DECISION, self._last_id)
+        decisions, self._last_id = subscribe_since(events.SIGNAL_NEW, self._last_id)
         for decision in decisions:
             action = decision.get("action", "")
+            if action in _SHUTDOWN:
+                logger.warning("[Executor] CANCEL_ALL received — halting new orders")
+                publish(events.RISK_ALERT, {"reason": "CANCEL_ALL", "source": "execution_bridge"})
+                continue
             if action not in _ACTIVE:
                 continue
             try:

@@ -1,4 +1,5 @@
 import asyncio
+import uvicorn
 from fastapi import FastAPI, WebSocket, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -61,3 +62,7 @@ async def ws_live(websocket: WebSocket):
             await asyncio.sleep(2)
     except Exception:
         pass
+
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=8000)

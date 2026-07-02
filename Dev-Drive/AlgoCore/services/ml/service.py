@@ -48,3 +48,9 @@ class MLService:
         while True:
             self._run_once()
             time.sleep(self.INTERVAL_SEC)
+
+
+if __name__ == "__main__":
+    from shared.config import settings
+
+    MLService(settings.trading_symbol, "binance").run()

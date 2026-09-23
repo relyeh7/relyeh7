@@ -479,6 +479,13 @@ void VWAP_Test_PanelToggleContract(void)
    g_alert_push = false; g_alert_sound = true;
    ASSERT_TRUE(!g_alert_push && g_alert_sound, "push and sound alert toggles are independent of each other");
 
+   g_min_zone_strength = 1;
+   ZI_Zone zLow; zLow.strength = 1;
+   ASSERT_TRUE(zLow.strength >= g_min_zone_strength, "with a panel-lowered min-strength of 1, a strength-1 zone now reaches the A+ highlight threshold");
+   g_min_zone_strength = 3;
+   ASSERT_TRUE(zLow.strength < g_min_zone_strength, "the same strength-1 zone no longer reaches a panel-raised min-strength of 3 - the live spin edit (VWAP_ZonesPanel.mqh's g_min_zone_strength, fix round 1) actually changes the highlight threshold");
+   g_min_zone_strength = 2; // restore the suite's default used elsewhere
+
    g_touch_band_request = 2;
    ASSERT_TRUE(g_touch_band_request == 2, "the panel's touch-band spin edit writes the requested value, applied by the main .mq5");
    g_touch_band_request = -1; // restore "no pending change"

@@ -106,7 +106,9 @@ double BufferLower2[];
 CVWAPZonesEngine g_engine;
 CVWAPZonesPanel  ExtPanel;
 
-int g_min_zone_strength = 2;
+// g_min_zone_strength is declared in VWAP_ZonesPanel.mqh (panel-owned, direct-set
+// by its live spin edit - see that file's header comment for why this one control
+// doesn't need the touch-band/exhaustion-bars request/apply indirection).
 
 datetime g_lastAlertNewZone    = 0;
 datetime g_lastAlertConfluence = 0;

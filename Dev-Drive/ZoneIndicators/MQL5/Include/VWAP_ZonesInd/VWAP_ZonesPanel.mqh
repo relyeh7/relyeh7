@@ -27,6 +27,14 @@ bool g_alert_push     = true;
 bool g_alert_sound    = true;
 bool g_panel_force_redraw = false; // set true when a layer is re-enabled
 
+//--- Min zone strength for the A+ highlight (spec Section 6's "input/slider de
+//--- fuerza minima de confluencia para resaltar", same role as SMC's
+//--- g_min_confluence / CRT's g_min_sweep_strength). Display-only - it never
+//--- touches the engine (strength is computed at zone-creation time and stored
+//--- on the zone itself), so unlike touch-band/exhaustion-bars below it is set
+//--- directly by the panel, no request/apply indirection needed.
+int  g_min_zone_strength = 2;
+
 //--- Set by the panel's live spin edits; the main .mq5 reads these once per
 //--- tick and calls the matching g_engine setter when they differ from the
 //--- engine's own value - the panel cannot reach the engine object directly.
@@ -96,13 +104,16 @@ private:
    CPanel            m_bar_exh;
    CLabel            m_lbl_exh;
    CSpinEdit         m_spin_exh;
+   CPanel            m_bar_strength;
+   CLabel            m_lbl_strength;
+   CSpinEdit         m_spin_strength;
    CPanel            m_bar_alerts;
    CLabel            m_lbl_alerts;
    CVWAPDarkCheckBox m_chk_push;
    CVWAPDarkCheckBox m_chk_sound;
 
    int               m_client_h;
-   int               m_y_layers, m_y_chk1, m_y_chk1b, m_y_touch, m_y_exh, m_y_alerts, m_y_chk2;
+   int               m_y_layers, m_y_chk1, m_y_chk1b, m_y_touch, m_y_exh, m_y_strength, m_y_alerts, m_y_chk2;
 
 public:
                      CVWAPZonesPanel(void) : m_client_h(0) {}
@@ -132,6 +143,7 @@ protected:
    void              OnChangeZones(void);
    void              OnChangeTouch(void);
    void              OnChangeExh(void);
+   void              OnChangeMinStrength(void);
    void              OnChangePush(void);
    void              OnChangeSound(void);
 };
@@ -143,9 +155,10 @@ void CVWAPZonesPanel::Layout(void)
    m_y_layers = y; y += VWP_HDR_H + VWP_GAP;
    m_y_chk1   = y; y += VWP_CHK_H + 2;
    m_y_chk1b  = y; y += VWP_CHK_H + VWP_GAP;
-   m_y_touch  = y; y += VWP_HDR_H + VWP_GAP;
-   m_y_exh    = y; y += VWP_HDR_H + VWP_GAP;
-   m_y_alerts = y; y += VWP_HDR_H + VWP_GAP;
+   m_y_touch    = y; y += VWP_HDR_H + VWP_GAP;
+   m_y_exh      = y; y += VWP_HDR_H + VWP_GAP;
+   m_y_strength = y; y += VWP_HDR_H + VWP_GAP;
+   m_y_alerts   = y; y += VWP_HDR_H + VWP_GAP;
    m_y_chk2   = y; y += VWP_CHK_H;
    m_client_h = y + VWP_IND;
 }
@@ -250,6 +263,20 @@ bool CVWAPZonesPanel::CreateControls(const int initialTouchBand, const int initi
    m_spin_exh.MaxValue(30);
    m_spin_exh.Value(initialExhaustionBars);
 
+   //--- Min zone strength for the A+ highlight (spec Section 6) - display-only,
+   //--- read directly from g_min_zone_strength (already seeded from InpMinZoneStrength
+   //--- in OnInit before CreateAt() is called), same as CRT's min-sweep-strength control.
+   if(!MakeBar(m_bar_strength, "BarStr", VWP_IND, m_y_strength, full_w, VWP_HDR_H, VWP_CLR_HDR)) return false;
+   if(!MakeLabel(m_lbl_strength, "LblStr", VWP_IND + 6, m_y_strength, 170, "MIN ZONE STRENGTH (A+)", clrWhite, 7, "Segoe UI Semibold"))
+      return false;
+   if(!m_spin_strength.Create(m_chart_id, m_name + "SpinStr", m_subwin,
+                               VWP_IND + full_w - 40, m_y_strength, VWP_IND + full_w - 6, m_y_strength + VWP_HDR_H))
+      return false;
+   if(!Add(m_spin_strength)) return false;
+   m_spin_strength.MinValue(1);
+   m_spin_strength.MaxValue(3);
+   m_spin_strength.Value(g_min_zone_strength);
+
    //--- Alerts
    if(!MakeBar(m_bar_alerts, "BarAl", VWP_IND, m_y_alerts, full_w, VWP_HDR_H, VWP_CLR_HDR)) return false;
    if(!MakeLabel(m_lbl_alerts, "LblAl", VWP_IND + 6, m_y_alerts, full_w - 6, "ALERTS", clrWhite, 7, "Segoe UI Semibold"))
@@ -330,6 +357,13 @@ void CVWAPZonesPanel::OnChangeExh(void)
    ChartRedraw(m_chart_id);
 }
 
+void CVWAPZonesPanel::OnChangeMinStrength(void)
+{
+   g_min_zone_strength = (int)m_spin_strength.Value();
+   g_panel_force_redraw = true; // re-highlight existing zones against the new threshold
+   ChartRedraw(m_chart_id);
+}
+
 void CVWAPZonesPanel::OnChangePush(void)
 {
    g_alert_push = m_chk_push.Checked();
@@ -347,6 +381,7 @@ EVENT_MAP_BEGIN(CVWAPZonesPanel)
    ON_EVENT(ON_CHANGE, m_chk_zones, OnChangeZones)
    ON_EVENT(ON_CHANGE, m_spin_touch, OnChangeTouch)
    ON_EVENT(ON_CHANGE, m_spin_exh,   OnChangeExh)
+   ON_EVENT(ON_CHANGE, m_spin_strength, OnChangeMinStrength)
    ON_EVENT(ON_CHANGE, m_chk_push,  OnChangePush)
    ON_EVENT(ON_CHANGE, m_chk_sound, OnChangeSound)
 EVENT_MAP_END(CAppDialog)

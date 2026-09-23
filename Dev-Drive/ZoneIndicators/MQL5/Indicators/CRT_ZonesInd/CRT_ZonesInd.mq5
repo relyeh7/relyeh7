@@ -139,11 +139,12 @@ void DrawRangeBox(void)
 
    double hi = g_engine.RangeHi();
    double lo = g_engine.RangeLo();
+   datetime t1 = g_engine.RangeStartTime(); // the frozen period's own bucket-start, not TimeCurrent()
    datetime t2 = TimeCurrent() + PeriodSeconds() * 5;
 
    if(ObjectFind(0, name) < 0)
    {
-      ObjectCreate(0, name, OBJ_RECTANGLE, 0, TimeCurrent(), hi, t2, lo);
+      ObjectCreate(0, name, OBJ_RECTANGLE, 0, t1, hi, t2, lo);
       ObjectSetInteger(0, name, OBJPROP_BACK, true);
       ObjectSetInteger(0, name, OBJPROP_SELECTABLE, false);
       ObjectSetInteger(0, name, OBJPROP_HIDDEN, true);
@@ -153,21 +154,21 @@ void DrawRangeBox(void)
    else
    {
       ObjectMove(0, name, 1, t2, lo);
-      ObjectSetDouble(0, name, OBJPROP_PRICE, 0, hi); // corner 0 price = hi
+      ObjectMove(0, name, 0, t1, hi); // corner 0 re-anchored every redraw: a new frozen period moves it forward
    }
    ObjectSetInteger(0, name, OBJPROP_COLOR, InpColorRange);
 
    string txt = StringFormat("CRT RANGE (%s)", EnumToString(g_engine.RangeMode()));
    if(ObjectFind(0, tname) < 0)
    {
-      ObjectCreate(0, tname, OBJ_TEXT, 0, TimeCurrent(), hi);
+      ObjectCreate(0, tname, OBJ_TEXT, 0, t1, hi);
       ObjectSetInteger(0, tname, OBJPROP_SELECTABLE, false);
       ObjectSetInteger(0, tname, OBJPROP_HIDDEN, true);
       ObjectSetInteger(0, tname, OBJPROP_FONTSIZE, 7);
       ObjectSetInteger(0, tname, OBJPROP_COLOR, InpColorRange);
    }
    else
-      ObjectMove(0, tname, 0, TimeCurrent(), hi);
+      ObjectMove(0, tname, 0, t1, hi);
    ObjectSetString(0, tname, OBJPROP_TEXT, txt);
 }
 

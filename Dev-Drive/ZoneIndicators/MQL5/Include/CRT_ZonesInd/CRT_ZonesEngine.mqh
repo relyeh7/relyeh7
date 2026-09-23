@@ -106,6 +106,7 @@ private:
    double   m_buildHi, m_buildLo;     // current (still-open) period's running high/low
    bool     m_hasRange;
    double   m_rangeHi, m_rangeLo;     // frozen reference range (the just-completed period)
+   datetime m_rangeStartTime;         // bucket-start time of the frozen period (for chart anchoring)
 
    //--- incremental ATR (true-range average), see file header note
    bool     m_atrInitialized;
@@ -155,6 +156,7 @@ public:
    bool     HasRange(void) const { return m_hasRange; }
    double   RangeHi(void)  const { return m_rangeHi; }
    double   RangeLo(void)  const { return m_rangeLo; }
+   datetime RangeStartTime(void) const { return m_rangeStartTime; }
    bool     PendingBuyActive(void)  const { return m_pendingBuyActive; }
    bool     PendingSellActive(void) const { return m_pendingSellActive; }
 };
@@ -181,7 +183,7 @@ void CCRTZonesEngine::Configure(ENUM_CRT_RANGE_MODE rangeMode, const int &sessio
    m_curBucket  = 0;
    m_buildHi = 0.0; m_buildLo = 0.0;
    m_hasRange = false;
-   m_rangeHi = 0.0; m_rangeLo = 0.0;
+   m_rangeHi = 0.0; m_rangeLo = 0.0; m_rangeStartTime = 0;
 
    m_atrInitialized = false;
    m_atrValue = 0.0; m_atrSum = 0.0; m_atrCount = 0;
@@ -314,6 +316,7 @@ void CCRTZonesEngine::ProcessClosedBar(int i, const datetime &time[], const doub
       // reference range; a new period starts building from this bar.
       m_rangeHi = m_buildHi;
       m_rangeLo = m_buildLo;
+      m_rangeStartTime = m_curBucket; // bucket-start of the period that just froze, not TimeCurrent()
       m_hasRange = true;
       m_curBucket = bucket;
       m_buildHi = high[i];

@@ -101,6 +101,22 @@ void CRT_Test_RangeFreeze(void)
    ASSERT_TRUE(eng.HasRange(), "reference range is frozen once the period rolls over");
    ASSERT_NEAR(eng.RangeHi(), 100.50, 1e-9, "frozen range high = max high of the completed period");
    ASSERT_NEAR(eng.RangeLo(), 99.30, 1e-9, "frozen range low = min low of the completed period");
+   ASSERT_TRUE(eng.RangeStartTime() == D'2026.01.01 00:00:00',
+               "RangeStartTime() = the frozen period's own bucket-start (00:00), not draw-time/TimeCurrent() - "
+               "regression test for the reference-range box left-edge anchoring bug");
+
+   // Second rollover: the box must re-anchor to the NEW frozen period's bucket-start,
+   // not stay pinned to the first one.
+   CRT_SetBar(time, open, high, low, close, D'2026.01.01 05:00', 100.00, 100.00, 100.05, 99.95);
+   eng.ProcessClosedBar(0, time, open, high, low, close);
+   CRT_SetBar(time, open, high, low, close, D'2026.01.01 06:00', 100.00, 100.00, 100.05, 99.95);
+   eng.ProcessClosedBar(0, time, open, high, low, close);
+   CRT_SetBar(time, open, high, low, close, D'2026.01.01 07:00', 100.00, 100.00, 100.05, 99.95);
+   eng.ProcessClosedBar(0, time, open, high, low, close);
+   CRT_SetBar(time, open, high, low, close, D'2026.01.01 08:00', 100.00, 100.00, 100.05, 99.95); // rolls into bucket 08:00
+   eng.ProcessClosedBar(0, time, open, high, low, close);
+   ASSERT_TRUE(eng.RangeStartTime() == D'2026.01.01 04:00:00',
+               "RangeStartTime() advances to the second period's bucket-start (04:00) after the next rollover");
 }
 
 //+------------------------------------------------------------------+

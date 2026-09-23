@@ -8,17 +8,21 @@ $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 $targets = @(
     "MQL5\Indicators\SMC_ZonesInd\SMC_ZonesInd.mq5",
-    "MQL5\Indicators\SMC_ZonesInd\SMC_ZonesInd_TestRunner.mq5",
+    "MQL5\Experts\ZoneIndicators_Tests\SMC_ZonesInd_TestRunner.mq5",
     "MQL5\Indicators\CRT_ZonesInd\CRT_ZonesInd.mq5",
-    "MQL5\Indicators\CRT_ZonesInd\CRT_ZonesInd_TestRunner.mq5",
+    "MQL5\Experts\ZoneIndicators_Tests\CRT_ZonesInd_TestRunner.mq5",
     "MQL5\Indicators\VWAP_ZonesInd\VWAP_ZonesInd.mq5",
-    "MQL5\Indicators\VWAP_ZonesInd\VWAP_ZonesInd_TestRunner.mq5"
+    "MQL5\Experts\ZoneIndicators_Tests\VWAP_ZonesInd_TestRunner.mq5"
 )
 
 # Filter by -Target if provided
 if ($Target -ne "") {
     $targets = $targets | Where-Object {
         $_ -match "\\$Target\\" -or $_ -match "$Target`_TestRunner\.mq5"
+    }
+    if ($targets.Count -eq 0) {
+        Write-Error "no targets matched -Target $Target"
+        exit 1
     }
 }
 

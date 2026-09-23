@@ -1,6 +1,9 @@
 //+------------------------------------------------------------------+
 //| ZI_Common.mqh — shared types for the Zone Indicators suite       |
 //+------------------------------------------------------------------+
+#ifndef ZI_COMMON_MQH
+#define ZI_COMMON_MQH
+
 #property strict
 
 enum ENUM_ZI_TYPE { ZI_BUY, ZI_SELL };
@@ -27,3 +30,5 @@ void ZI_Alert(const string message, const bool push_enabled,
    if(sound_enabled) Alert(message);
    if(push_enabled)  SendNotification(message);
 }
+
+#endif

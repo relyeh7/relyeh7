@@ -17,18 +17,19 @@ if (-not $SkipBuild) {
     if ($LASTEXITCODE -ne 0) { exit 1 }
 }
 $map = @(
-    @{ src = "ZoneIndicators\MQL5\Include\ZoneIndicators";        dst = "Include\ZoneIndicators";        filter = "*.mqh" },
-    @{ src = "ZoneIndicators\MQL5\Include\SMC_ZonesInd";          dst = "Include\SMC_ZonesInd";          filter = "*.mqh" },
-    @{ src = "ZoneIndicators\MQL5\Include\CRT_ZonesInd";          dst = "Include\CRT_ZonesInd";          filter = "*.mqh" },
-    @{ src = "ZoneIndicators\MQL5\Include\VWAP_ZonesInd";         dst = "Include\VWAP_ZonesInd";         filter = "*.mqh" },
-    @{ src = "ZoneIndicators\MQL5\Indicators\SMC_ZonesInd";       dst = "Indicators\SMC_ZonesInd";       filter = "*.mq5" },
-    @{ src = "ZoneIndicators\MQL5\Indicators\SMC_ZonesInd";       dst = "Indicators\SMC_ZonesInd";       filter = "*.ex5" },
-    @{ src = "ZoneIndicators\MQL5\Indicators\CRT_ZonesInd";       dst = "Indicators\CRT_ZonesInd";       filter = "*.mq5" },
-    @{ src = "ZoneIndicators\MQL5\Indicators\CRT_ZonesInd";       dst = "Indicators\CRT_ZonesInd";       filter = "*.ex5" },
-    @{ src = "ZoneIndicators\MQL5\Indicators\VWAP_ZonesInd";      dst = "Indicators\VWAP_ZonesInd";      filter = "*.mq5" },
-    @{ src = "ZoneIndicators\MQL5\Indicators\VWAP_ZonesInd";      dst = "Indicators\VWAP_ZonesInd";      filter = "*.ex5" },
-    @{ src = "ZoneIndicators\MQL5\Experts\ZoneIndicators_Tests";  dst = "Experts\ZoneIndicators_Tests";  filter = "*.mq5" },
-    @{ src = "ZoneIndicators\MQL5\Experts\ZoneIndicators_Tests";  dst = "Experts\ZoneIndicators_Tests";  filter = "*.ex5" }
+    @{ src = "MQL5\Include\ZoneIndicators";        dst = "Include\ZoneIndicators";        filter = "*.mqh" },
+    @{ src = "MQL5\Include\Controls";              dst = "Include\Controls";              filter = "*.mqh" },
+    @{ src = "MQL5\Include\SMC_ZonesInd";          dst = "Include\SMC_ZonesInd";          filter = "*.mqh" },
+    @{ src = "MQL5\Include\CRT_ZonesInd";          dst = "Include\CRT_ZonesInd";          filter = "*.mqh" },
+    @{ src = "MQL5\Include\VWAP_ZonesInd";         dst = "Include\VWAP_ZonesInd";         filter = "*.mqh" },
+    @{ src = "MQL5\Indicators\SMC_ZonesInd";       dst = "Indicators\SMC_ZonesInd";       filter = "*.mq5" },
+    @{ src = "MQL5\Indicators\SMC_ZonesInd";       dst = "Indicators\SMC_ZonesInd";       filter = "*.ex5" },
+    @{ src = "MQL5\Indicators\CRT_ZonesInd";       dst = "Indicators\CRT_ZonesInd";       filter = "*.mq5" },
+    @{ src = "MQL5\Indicators\CRT_ZonesInd";       dst = "Indicators\CRT_ZonesInd";       filter = "*.ex5" },
+    @{ src = "MQL5\Indicators\VWAP_ZonesInd";      dst = "Indicators\VWAP_ZonesInd";      filter = "*.mq5" },
+    @{ src = "MQL5\Indicators\VWAP_ZonesInd";      dst = "Indicators\VWAP_ZonesInd";      filter = "*.ex5" },
+    @{ src = "MQL5\Experts\ZoneIndicators_Tests";  dst = "Experts\ZoneIndicators_Tests";  filter = "*.mq5" },
+    @{ src = "MQL5\Experts\ZoneIndicators_Tests";  dst = "Experts\ZoneIndicators_Tests";  filter = "*.ex5" }
 )
 foreach ($m in $map) {
     $s = Join-Path $root $m.src

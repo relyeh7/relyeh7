@@ -285,6 +285,46 @@ void SMC_Test_Confluence(void)
 }
 
 //+------------------------------------------------------------------+
+//| Zone-cap eviction: once SMC_MAX_ZONES is exceeded, the oldest zone|
+//| is dropped from m_zones AND queued in the pending-deletion list so|
+//| the caller (SyncZoneObjects in SMC_ZonesInd.mq5) can delete its    |
+//| chart objects instead of orphaning them on the chart forever.     |
+//+------------------------------------------------------------------+
+void SMC_Test_ZoneEviction(void)
+{
+   Print("--- Zone cap eviction (SMC_MAX_ZONES) + pending-deletion queue");
+   datetime time[]; double open[], high[], low[], close[];
+
+   CSMCZonesEngine eng;
+   eng.Configure(3.0, 1.0, 50.0, 50, 50, SMC_T_POINT);
+
+   int totalToAdd = SMC_MAX_ZONES + 5; // push 5 zones past the cap
+   datetime firstBarTime = 0;
+   for(int k = 0; k < totalToAdd; k++)
+   {
+      SMC_BuildBaseline(time, open, high, low, close, 6);
+      time[3] = D'2026.01.01 00:00' + k * 60; // unique OB-candle bar time per iteration
+      open[3] = 100.00; close[3] = 100.00; high[3] = 100.05; low[3] = 99.95;
+      open[4] = 100.05; close[4] = 98.50;  high[4] = 100.06; low[4] = 98.40;
+      if(k == 0) firstBarTime = time[3];
+      eng.ProcessClosedBar(4, time, open, high, low, close);
+   }
+
+   ASSERT_EQ_INT(eng.ZonesTotal(), SMC_MAX_ZONES, "zone array stays capped at SMC_MAX_ZONES once exceeded");
+   ASSERT_EQ_INT(eng.PendingDeletionsTotal(), totalToAdd - SMC_MAX_ZONES, "one pending deletion is queued per zone evicted past the cap");
+
+   ZI_Zone evicted;
+   bool gotFirst = eng.GetPendingDeletion(0, evicted);
+   ASSERT_TRUE(gotFirst, "the earliest-evicted zone is readable from the pending-deletion queue");
+   if(gotFirst)
+      ASSERT_TRUE(evicted.bar_time == firstBarTime, "the very first zone added is the first one evicted (oldest-first) and queued for chart cleanup - it would otherwise orphan its OBJ_RECTANGLE/OBJ_TEXT forever");
+
+   // Mirrors SyncZoneObjects() draining the queue every tick after deleting each object.
+   eng.ClearPendingDeletions();
+   ASSERT_EQ_INT(eng.PendingDeletionsTotal(), 0, "ClearPendingDeletions() drains the queue once the caller has cleaned up the chart objects");
+}
+
+//+------------------------------------------------------------------+
 //| Premium/Discount: a SELL zone formed in the premium half of the   |
 //| recent range gets a confluence bonus; in discount, it does not.   |
 //+------------------------------------------------------------------+
@@ -400,6 +440,7 @@ int SMC_RunAllTests(void)
    SMC_Test_LiquiditySweep();
    SMC_Test_Mitigation();
    SMC_Test_Confluence();
+   SMC_Test_ZoneEviction();
    SMC_Test_PremiumDiscount();
    SMC_Test_PanelToggleContract();
    SMC_Test_AlertThrottle();

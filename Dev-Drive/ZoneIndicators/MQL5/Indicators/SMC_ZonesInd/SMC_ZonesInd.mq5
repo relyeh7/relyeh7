@@ -162,9 +162,25 @@ void DrawPDLine(void)
 //| Reconciles chart objects with the engine's current zone list:     |
 //| draws/updates active zones whose layer is enabled, deletes        |
 //| objects for mitigated or hidden zones, then compacts the array.   |
+//| Also drains the engine's pending-deletion queue: zones the        |
+//| SMC_MAX_ZONES cap evicted (mitigated or not) still need their     |
+//| chart objects removed, or they orphan on the chart forever since  |
+//| the main zone loop below only sees what's still in the engine.    |
 //+------------------------------------------------------------------+
 void SyncZoneObjects(void)
 {
+   int pending = g_engine.PendingDeletionsTotal();
+   for(int idx = 0; idx < pending; idx++)
+   {
+      ZI_Zone z;
+      if(g_engine.GetPendingDeletion(idx, z))
+      {
+         string pendingName = ZoneObjName(z);
+         DeleteZoneObj(pendingName);
+      }
+   }
+   g_engine.ClearPendingDeletions();
+
    int n = g_engine.ZonesTotal();
    for(int idx = 0; idx < n; idx++)
    {

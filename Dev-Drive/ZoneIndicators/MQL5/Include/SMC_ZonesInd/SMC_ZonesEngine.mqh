@@ -38,6 +38,8 @@ class CSMCZonesEngine
 private:
    ZI_Zone         m_zones[];
    bool            m_touched[];      // parallel array, same index space as m_zones
+   ZI_Zone         m_pendingDeletions[]; // zones evicted by the SMC_MAX_ZONES cap, awaiting
+                                          // chart-object cleanup by the caller (see PendingDeletion*)
    SMC_SwingPoint  m_swingHighs[];
    SMC_SwingPoint  m_swingLows[];
 
@@ -76,6 +78,14 @@ public:
    bool   WasTouched(int idx) const;
    void   MarkTouched(int idx);
 
+   // Zones the SMC_MAX_ZONES cap evicted from m_zones (oldest-first) since the last drain.
+   // The engine draws nothing itself, so it cannot delete their chart objects - the caller
+   // must drain this every time it reconciles chart objects (see SMC_ZonesInd.mq5's
+   // SyncZoneObjects), or an evicted zone's OBJ_RECTANGLE/OBJ_TEXT is orphaned forever.
+   int    PendingDeletionsTotal(void) const { return ArraySize(m_pendingDeletions); }
+   bool   GetPendingDeletion(int idx, ZI_Zone &out) const;
+   void   ClearPendingDeletions(void) { ArrayResize(m_pendingDeletions, 0); }
+
    bool   IsPremium(void) const { return m_isPremium; }
    double RangeHi(void)   const { return m_rangeHi; }
    double RangeLo(void)   const { return m_rangeLo; }
@@ -97,6 +107,7 @@ void CSMCZonesEngine::Configure(double impulseFactor, double fvgMinPoints, doubl
    m_isPremium = false;
    ArrayResize(m_zones, 0);
    ArrayResize(m_touched, 0);
+   ArrayResize(m_pendingDeletions, 0);
    ArrayResize(m_swingHighs, 0);
    ArrayResize(m_swingLows, 0);
 }
@@ -249,6 +260,13 @@ void CSMCZonesEngine::AddZone(double hiIn, double loIn, ENUM_ZI_TYPE type, datet
 
    if(n + 1 > SMC_MAX_ZONES)
    {
+      // The oldest zone (index 0) is about to be dropped from m_zones, whether or not it
+      // was ever mitigated - queue it so the caller can delete its chart objects too,
+      // instead of orphaning them (it may already have an OBJ_RECTANGLE/OBJ_TEXT drawn).
+      int pd = ArraySize(m_pendingDeletions);
+      ArrayResize(m_pendingDeletions, pd + 1);
+      m_pendingDeletions[pd] = m_zones[0];
+
       for(int k = 0; k < n; k++)
       {
          m_zones[k]   = m_zones[k + 1];
@@ -381,6 +399,13 @@ bool CSMCZonesEngine::GetZone(int idx, ZI_Zone &out) const
 {
    if(idx < 0 || idx >= ArraySize(m_zones)) return false;
    out = m_zones[idx];
+   return true;
+}
+
+bool CSMCZonesEngine::GetPendingDeletion(int idx, ZI_Zone &out) const
+{
+   if(idx < 0 || idx >= ArraySize(m_pendingDeletions)) return false;
+   out = m_pendingDeletions[idx];
    return true;
 }
 

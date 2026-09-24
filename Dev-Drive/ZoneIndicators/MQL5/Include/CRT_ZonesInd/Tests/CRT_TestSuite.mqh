@@ -10,6 +10,7 @@
 #include "CRT_TestAsserts.mqh"
 #include <ZoneIndicators\ZI_Common.mqh>
 #include <CRT_ZonesInd\CRT_ZonesEngine.mqh>
+#include <CRT_ZonesInd\CRT_ZonesMTF.mqh>
 #include <CRT_ZonesInd\CRT_ZonesPanel.mqh>
 
 #define CRT_T_POINT 0.01
@@ -428,6 +429,130 @@ void CRT_Test_AlertThrottle(void)
 }
 
 //+------------------------------------------------------------------+
+//| MTF signal row: CCRTZonesMTFScanner.DecideSignal() driven with     |
+//| synthetic engines (no CopyRates/real symbol data needed), plus     |
+//| the CRT_MTFShouldScan() refresh-interval gate.                     |
+//+------------------------------------------------------------------+
+void CRT_Test_MTFSignals(void)
+{
+   Print("--- MTF Signals (CCRTZonesMTFScanner)");
+   datetime time[]; double open[], high[], low[], close[];
+   int sh[]; CRT_MakeSessionHours(sh);
+
+   CCRTZonesMTFScanner scanner;
+   scanner.Configure(CRT_RANGE_H4, sh, 14, false, 5.0, 0.0, 10, CRT_T_POINT, 2);
+
+   // Classification: same-bar BUY sweep+reentry -> ZI_MTF_BUY
+   CCRTZonesEngine engBuyOnly;
+   engBuyOnly.Configure(CRT_RANGE_H4, sh, 14, false, 5.0, 0.0, 10, CRT_T_POINT);
+   CRT_SetBar(time, open, high, low, close, D'2026.01.01 00:00', 100.00, 100.00, 100.05, 99.95);
+   engBuyOnly.ProcessClosedBar(0, time, open, high, low, close);
+   CRT_SetBar(time, open, high, low, close, D'2026.01.01 04:00', 99.90, 99.98, 99.99, 99.70);
+   engBuyOnly.ProcessClosedBar(0, time, open, high, low, close);
+   ASSERT_TRUE(scanner.DecideSignal(engBuyOnly) == ZI_MTF_BUY, "a single active BUY zone classifies as ZI_MTF_BUY");
+
+   // Classification: same-bar SELL sweep+reentry -> ZI_MTF_SELL
+   CCRTZonesEngine engSellOnly;
+   engSellOnly.Configure(CRT_RANGE_H4, sh, 14, false, 5.0, 0.0, 10, CRT_T_POINT);
+   CRT_SetBar(time, open, high, low, close, D'2026.01.01 00:00', 100.00, 100.00, 100.05, 99.95);
+   engSellOnly.ProcessClosedBar(0, time, open, high, low, close);
+   CRT_SetBar(time, open, high, low, close, D'2026.01.01 04:00', 100.10, 100.00, 100.40, 99.99);
+   engSellOnly.ProcessClosedBar(0, time, open, high, low, close);
+   ASSERT_TRUE(scanner.DecideSignal(engSellOnly) == ZI_MTF_SELL, "a single active SELL zone classifies as ZI_MTF_SELL");
+
+   // Classification: no sweep at all -> ZI_MTF_NONE
+   CCRTZonesEngine engNone;
+   engNone.Configure(CRT_RANGE_H4, sh, 14, false, 5.0, 0.0, 10, CRT_T_POINT);
+   CRT_SetBar(time, open, high, low, close, D'2026.01.01 00:00', 100.00, 100.00, 100.05, 99.95);
+   engNone.ProcessClosedBar(0, time, open, high, low, close);
+   ASSERT_TRUE(scanner.DecideSignal(engNone) == ZI_MTF_NONE, "no active zones in either direction classifies as ZI_MTF_NONE");
+
+   // A+ priority over normal when both directions coexist: a deep (strength-3, A+) BUY sweep
+   // at 04:00, followed by a later (08:00) but shallow (strength-1, normal) SELL sweep. Naive
+   // most-recent-wins would pick the later SELL zone; the A+ rule must still pick BUY.
+   CCRTZonesEngine engMixed;
+   engMixed.Configure(CRT_RANGE_H4, sh, 14, false, 5.0, 0.0, 10, CRT_T_POINT); // threshold = 0.05
+   CRT_SetBar(time, open, high, low, close, D'2026.01.01 00:00', 100.00, 100.00, 100.05, 99.95);
+   engMixed.ProcessClosedBar(0, time, open, high, low, close); // establishes bucket 00:00, no range yet
+   CRT_SetBar(time, open, high, low, close, D'2026.01.01 04:00', 99.90, 99.98, 99.99, 99.70); // rollover: freezes [99.95,100.05];
+                                                                                                // BUY sweep depth 0.25 >= 3*0.05 -> strength 3 (A+)
+   engMixed.ProcessClosedBar(0, time, open, high, low, close);
+   CRT_SetBar(time, open, high, low, close, D'2026.01.01 08:00', 100.00, 99.95, 100.06, 99.90); // rollover: freezes [99.70,99.99];
+                                                                                                  // SELL sweep depth 0.07 < 2*0.05 -> strength 1 (normal);
+                                                                                                  // close 99.95 stays above the BUY zone's price_lo (99.70), so it
+                                                                                                  // does not also mitigate the BUY zone (CheckMitigation is close-only)
+   engMixed.ProcessClosedBar(0, time, open, high, low, close);
+
+   ASSERT_EQ_INT(engMixed.ZonesTotal(), 2, "exactly one BUY zone (04:00) and one SELL zone (08:00) were created");
+   ZI_Zone zBuyM, zSellM;
+   engMixed.GetZone(0, zBuyM); engMixed.GetZone(1, zSellM);
+   ASSERT_TRUE(zBuyM.type == ZI_BUY && zBuyM.strength >= 3, "the first (04:00) zone is a BUY at A+ strength (>=3)");
+   ASSERT_TRUE(zSellM.type == ZI_SELL && zSellM.strength < 3 && zSellM.bar_time > zBuyM.bar_time,
+      "the second (08:00) zone is a SELL at normal strength and formed after the BUY zone");
+
+   CCRTZonesMTFScanner scannerAplus;
+   scannerAplus.Configure(CRT_RANGE_H4, sh, 14, false, 5.0, 0.0, 10, CRT_T_POINT, 3); // min strength 3: BUY qualifies A+, SELL does not
+   ASSERT_TRUE(scannerAplus.DecideSignal(engMixed) == ZI_MTF_BUY, "an A+ BUY zone outranks a more-recent but merely-normal SELL zone");
+
+   // Refresh-interval gate: CRT_MTFShouldScan mirrors OnTimer()'s once-per-N-seconds throttle.
+   datetime t0 = D'2026.01.01 00:00:00';
+   ASSERT_TRUE(!CRT_MTFShouldScan(t0, t0 + 5, 10), "5s elapsed does not yet meet a 10s refresh interval");
+   ASSERT_TRUE(CRT_MTFShouldScan(t0, t0 + 10, 10), "exactly 10s elapsed meets the refresh interval (>=, not >)");
+   ASSERT_TRUE(CRT_MTFShouldScan(t0, t0 + 11, 10), "more than 10s elapsed still meets the refresh interval");
+}
+
+//+------------------------------------------------------------------+
+//| MTF current-timeframe reuse (design spec S4): the chart's own      |
+//| period must be decided from the live engine directly, never via    |
+//| an independent CopyRates rescan - and DecideSignal() must not      |
+//| mutate a shared/live engine (no RemoveMitigated side effect), or    |
+//| an OnTimer-driven call could race SyncZoneObjects()'s own          |
+//| pending-deletion bookkeeping in CRT_ZonesInd.mq5 and orphan chart  |
+//| objects.                                                            |
+//+------------------------------------------------------------------+
+void CRT_Test_MTFCurrentTimeframeReuse(void)
+{
+   Print("--- MTF current-timeframe reuse (no throwaway CopyRates scan for the chart's own period)");
+   datetime time[]; double open[], high[], low[], close[];
+   int sh[]; CRT_MakeSessionHours(sh);
+
+   // Simulates g_engine: a "live" engine holding one BUY zone (same-bar sweep+reentry).
+   CCRTZonesEngine liveEngine;
+   liveEngine.Configure(CRT_RANGE_H4, sh, 14, false, 5.0, 0.0, 10, CRT_T_POINT);
+   CRT_SetBar(time, open, high, low, close, D'2026.01.01 00:00', 100.00, 100.00, 100.05, 99.95);
+   liveEngine.ProcessClosedBar(0, time, open, high, low, close);
+   CRT_SetBar(time, open, high, low, close, D'2026.01.01 04:00', 99.90, 99.98, 99.99, 99.70);
+   liveEngine.ProcessClosedBar(0, time, open, high, low, close);
+   ASSERT_EQ_INT(liveEngine.ZonesTotal(), 1, "the simulated live engine holds one BUY zone before any MTF scan");
+
+   CCRTZonesMTFScanner scanner;
+   scanner.Configure(CRT_RANGE_H4, sh, 14, false, 5.0, 0.0, 10, CRT_T_POINT, 2);
+
+   int curIdx = scanner.IndexForPeriod(_Period);
+   ASSERT_TRUE(curIdx >= 0, "the test runner's own chart period is one of the 6 tracked MTF timeframes");
+   scanner.ScanAllReusingCurrent(_Symbol, 300, _Period, liveEngine);
+   ASSERT_TRUE(scanner.Signal(curIdx) == ZI_MTF_BUY,
+      "the current-timeframe slot reflects the live engine's own BUY zone directly, not an independent CopyRates rescan");
+
+   // DecideSignal() must not mutate a shared live engine.
+   int beforeCount = liveEngine.ZonesTotal();
+   liveEngine.CheckMitigation(50.00); // closes far below price_lo (99.70) -> mitigates the BUY zone
+   ENUM_ZI_MTF_SIGNAL afterMitigation = scanner.DecideSignal(liveEngine);
+   ASSERT_TRUE(afterMitigation == ZI_MTF_NONE, "a mitigated zone is excluded from the decision");
+   ASSERT_EQ_INT(liveEngine.ZonesTotal(), beforeCount,
+      "DecideSignal() does not physically remove the mitigated zone from a shared/live engine (no RemoveMitigated side effect)");
+
+   // IndexForPeriod: round-trips for all 6 tracked timeframes, -1 for an untracked one.
+   ASSERT_EQ_INT(scanner.IndexForPeriod(PERIOD_M1),  0, "IndexForPeriod(M1) = 0");
+   ASSERT_EQ_INT(scanner.IndexForPeriod(PERIOD_M5),  1, "IndexForPeriod(M5) = 1");
+   ASSERT_EQ_INT(scanner.IndexForPeriod(PERIOD_M15), 2, "IndexForPeriod(M15) = 2");
+   ASSERT_EQ_INT(scanner.IndexForPeriod(PERIOD_H1),  3, "IndexForPeriod(H1) = 3");
+   ASSERT_EQ_INT(scanner.IndexForPeriod(PERIOD_H4),  4, "IndexForPeriod(H4) = 4");
+   ASSERT_EQ_INT(scanner.IndexForPeriod(PERIOD_D1),  5, "IndexForPeriod(D1) = 5");
+   ASSERT_EQ_INT(scanner.IndexForPeriod(PERIOD_M30), -1, "IndexForPeriod(M30) = -1 (not one of the 6 tracked timeframes)");
+}
+
+//+------------------------------------------------------------------+
 int CRT_RunAllTests(void)
 {
    g_crtTestFailures = 0;
@@ -442,6 +567,8 @@ int CRT_RunAllTests(void)
    CRT_Test_ResetRangeMode();
    CRT_Test_PanelToggleContract();
    CRT_Test_AlertThrottle();
+   CRT_Test_MTFSignals();
+   CRT_Test_MTFCurrentTimeframeReuse();
    TEST_SUMMARY();
    return g_crtTestFailures;
 }

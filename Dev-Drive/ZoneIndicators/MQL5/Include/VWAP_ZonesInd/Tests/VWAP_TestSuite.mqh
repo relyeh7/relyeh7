@@ -10,6 +10,7 @@
 #include "VWAP_TestAsserts.mqh"
 #include <ZoneIndicators\ZI_Common.mqh>
 #include <VWAP_ZonesInd\VWAP_ZonesEngine.mqh>
+#include <VWAP_ZonesInd\VWAP_ZonesMTF.mqh>
 #include <VWAP_ZonesInd\VWAP_ZonesPanel.mqh>
 
 #define VWAP_T_POINT 0.01
@@ -517,6 +518,193 @@ void VWAP_Test_AlertThrottle(void)
 }
 
 //+------------------------------------------------------------------+
+//| MTF signal row: CVWAPZonesMTFScanner.DecideSignal() driven with    |
+//| synthetic engines (no CopyRates/real symbol data needed), plus     |
+//| the VWAP_MTFShouldScan() refresh-interval gate.                    |
+//+------------------------------------------------------------------+
+void VWAP_Test_MTFSignals(void)
+{
+   Print("--- MTF Signals (CVWAPZonesMTFScanner)");
+   datetime time[]; double high[], low[], close[]; long tickVol[], realVol[];
+
+   CVWAPZonesMTFScanner scanner;
+   scanner.Configure(1.0, 2.0, 1, 5, false, VWAP_T_POINT, 2);
+
+   // Classification: a lone confirmed BUY zone (reusing VWAP_Test_ExhaustionBuyZone's
+   // hand-verified 5-bar sequence) -> ZI_MTF_BUY.
+   CVWAPZonesEngine engBuyOnly;
+   engBuyOnly.Configure(1.0, 2.0, 1, 5, false, VWAP_T_POINT);
+   VWAP_SetBar(time, high, low, close, tickVol, realVol, D'2026.01.01 00:00', 100.5, 99.5, 100.0, 50, 0);
+   engBuyOnly.ProcessClosedBar(0, time, high, low, close, tickVol, realVol);
+   VWAP_SetBar(time, high, low, close, tickVol, realVol, D'2026.01.01 00:15', 101.0, 99.0, 100.0, 50, 0);
+   engBuyOnly.ProcessClosedBar(0, time, high, low, close, tickVol, realVol);
+   VWAP_SetBar(time, high, low, close, tickVol, realVol, D'2026.01.01 00:30', 100.6, 99.6, 100.0, 40, 0);
+   engBuyOnly.ProcessClosedBar(0, time, high, low, close, tickVol, realVol);
+   VWAP_SetBar(time, high, low, close, tickVol, realVol, D'2026.01.01 00:45', 100.4, 99.7, 100.0, 30, 0);
+   engBuyOnly.ProcessClosedBar(0, time, high, low, close, tickVol, realVol);
+   VWAP_SetBar(time, high, low, close, tickVol, realVol, D'2026.01.01 01:00', 100.0, 90.0, 99.0, 10, 0);
+   engBuyOnly.ProcessClosedBar(0, time, high, low, close, tickVol, realVol);
+   ASSERT_TRUE(scanner.DecideSignal(engBuyOnly) == ZI_MTF_BUY, "a single active BUY zone classifies as ZI_MTF_BUY");
+
+   // Classification: a lone confirmed SELL zone (reusing VWAP_Test_ExhaustionSellZone's
+   // hand-verified 5-bar sequence) -> ZI_MTF_SELL.
+   CVWAPZonesEngine engSellOnly;
+   engSellOnly.Configure(1.0, 2.0, 1, 5, false, VWAP_T_POINT);
+   VWAP_SetBar(time, high, low, close, tickVol, realVol, D'2026.01.01 00:00', 100.5, 99.5, 100.0, 50, 0);
+   engSellOnly.ProcessClosedBar(0, time, high, low, close, tickVol, realVol);
+   VWAP_SetBar(time, high, low, close, tickVol, realVol, D'2026.01.01 00:15', 101.0, 99.0, 100.0, 50, 0);
+   engSellOnly.ProcessClosedBar(0, time, high, low, close, tickVol, realVol);
+   VWAP_SetBar(time, high, low, close, tickVol, realVol, D'2026.01.01 00:30', 100.6, 99.6, 100.0, 40, 0);
+   engSellOnly.ProcessClosedBar(0, time, high, low, close, tickVol, realVol);
+   VWAP_SetBar(time, high, low, close, tickVol, realVol, D'2026.01.01 00:45', 100.4, 99.7, 100.0, 30, 0);
+   engSellOnly.ProcessClosedBar(0, time, high, low, close, tickVol, realVol);
+   VWAP_SetBar(time, high, low, close, tickVol, realVol, D'2026.01.01 01:00', 110.0, 100.0, 101.0, 10, 0);
+   engSellOnly.ProcessClosedBar(0, time, high, low, close, tickVol, realVol);
+   ASSERT_TRUE(scanner.DecideSignal(engSellOnly) == ZI_MTF_SELL, "a single active SELL zone classifies as ZI_MTF_SELL");
+
+   // Classification: no touch bar at all -> no zones -> ZI_MTF_NONE.
+   CVWAPZonesEngine engNone;
+   engNone.Configure(1.0, 2.0, 1, 5, false, VWAP_T_POINT);
+   VWAP_SetBar(time, high, low, close, tickVol, realVol, D'2026.01.01 00:00', 100.5, 99.5, 100.0, 50, 0);
+   engNone.ProcessClosedBar(0, time, high, low, close, tickVol, realVol);
+   ASSERT_EQ_INT(engNone.ZonesTotal(), 0, "sanity check: a single non-touching bar creates no zone");
+   ASSERT_TRUE(scanner.DecideSignal(engNone) == ZI_MTF_NONE, "no active zones in either direction classifies as ZI_MTF_NONE");
+
+   // A+ priority over normal when both directions coexist: a deep (strength-3, A+) BUY touch
+   // at 00:15, followed by a later (00:30) but shallow (strength-1, normal, band-1-only) SELL
+   // touch. Naive most-recent-wins would pick the later SELL zone; the A+ rule must still pick
+   // BUY. Bar-by-bar arithmetic hand-verified below (window capacity=1 via exhaustionBars=2,
+   // the same minimal-window trick VWAP_Test_ZoneEviction uses).
+   CVWAPZonesEngine engMixed;
+   engMixed.Configure(1.0, 2.0, 1, 2, false, VWAP_T_POINT);
+   // Bar A (00:00): typical=100.0, vol=100 - fills the 1-bar window, no touch possible yet.
+   VWAP_SetBar(time, high, low, close, tickVol, realVol, D'2026.01.01 00:00', 100.5, 99.5, 100.0, 100, 0);
+   engMixed.ProcessClosedBar(0, time, high, low, close, tickVol, realVol);
+   // Bar B (00:15): typical=80.0 -> VWAP=13200/140=660/7=94.2857, stdDev=sqrt(81.632653)=9.0350;
+   // Band1Lower=85.2507, Band2Lower=76.2157. low=50.0 clears BOTH bands and beats the window's
+   // only low (99.5); vol=40 is <=40 (non-increasing vs window's 100) AND <=50% of 100 -> BUY
+   // zone strength = 1 (base) + 1 (band2 cleared) + 1 (sharp vol decline) = 3 (A+).
+   VWAP_SetBar(time, high, low, close, tickVol, realVol, D'2026.01.01 00:15', 100.0, 50.0, 90.0, 40, 0);
+   engMixed.ProcessClosedBar(0, time, high, low, close, tickVol, realVol);
+   // Bar C (00:30): typical=307/3=102.3333 -> VWAP=16781.6667/175=95.8952, stdDev=sqrt(75.673923)
+   // =8.6989; Band1Upper=104.5941, Band2Upper=113.293. high=112.0 clears band1 but NOT band2
+   // (112.0 < 113.293) and beats the window's only high (100.0, bar B's); vol=35 is <=40
+   // (non-increasing) but NOT <=50% of 40 (20) -> SELL zone strength = 1 (base only, normal).
+   VWAP_SetBar(time, high, low, close, tickVol, realVol, D'2026.01.01 00:30', 112.0, 95.0, 100.0, 35, 0);
+   engMixed.ProcessClosedBar(0, time, high, low, close, tickVol, realVol);
+
+   ASSERT_EQ_INT(engMixed.ZonesTotal(), 2, "exactly one BUY zone (00:15) and one SELL zone (00:30) were created");
+   ZI_Zone zBuyM, zSellM;
+   engMixed.GetZone(0, zBuyM); engMixed.GetZone(1, zSellM);
+   ASSERT_TRUE(zBuyM.type == ZI_BUY && zBuyM.strength >= 2, "the first (00:15) zone is a BUY at A+ strength (>=2)");
+   ASSERT_TRUE(zSellM.type == ZI_SELL && zSellM.strength < 2 && zSellM.bar_time > zBuyM.bar_time,
+      "the second (00:30) zone is a SELL at normal strength and formed after the BUY zone");
+   ASSERT_TRUE(!engMixed.IsMitigated(0) && !engMixed.IsMitigated(1), "neither zone was mitigated by the other bar's close (sanity check)");
+
+   ASSERT_TRUE(scanner.DecideSignal(engMixed) == ZI_MTF_BUY, "an A+ BUY zone (min strength=2) outranks a more-recent but merely-normal SELL zone");
+
+   // Refresh-interval gate: VWAP_MTFShouldScan mirrors OnTimer()'s once-per-N-seconds throttle.
+   datetime t0 = D'2026.01.01 00:00:00';
+   ASSERT_TRUE(!VWAP_MTFShouldScan(t0, t0 + 5, 10), "5s elapsed does not yet meet a 10s refresh interval");
+   ASSERT_TRUE(VWAP_MTFShouldScan(t0, t0 + 10, 10), "exactly 10s elapsed meets the refresh interval (>=, not >)");
+   ASSERT_TRUE(VWAP_MTFShouldScan(t0, t0 + 11, 10), "more than 10s elapsed still meets the refresh interval");
+}
+
+//+------------------------------------------------------------------+
+//| MTF current-timeframe reuse (design spec S4): the chart's own      |
+//| period must be decided from the live engine directly, never via    |
+//| an independent CopyRates rescan - and DecideSignal() must not      |
+//| mutate a shared/live engine (no RemoveMitigated side effect), or    |
+//| an OnTimer-driven call could race SyncZoneObjects()'s own          |
+//| pending-deletion bookkeeping in VWAP_ZonesInd.mq5 and orphan chart |
+//| objects.                                                            |
+//+------------------------------------------------------------------+
+void VWAP_Test_MTFCurrentTimeframeReuse(void)
+{
+   Print("--- MTF current-timeframe reuse (no throwaway CopyRates scan for the chart's own period)");
+   datetime time[]; double high[], low[], close[]; long tickVol[], realVol[];
+
+   // Simulates g_engine: a "live" engine holding one BUY zone.
+   CVWAPZonesEngine liveEngine;
+   liveEngine.Configure(1.0, 2.0, 1, 5, false, VWAP_T_POINT);
+   VWAP_SetBar(time, high, low, close, tickVol, realVol, D'2026.01.01 00:00', 100.5, 99.5, 100.0, 50, 0);
+   liveEngine.ProcessClosedBar(0, time, high, low, close, tickVol, realVol);
+   VWAP_SetBar(time, high, low, close, tickVol, realVol, D'2026.01.01 00:15', 101.0, 99.0, 100.0, 50, 0);
+   liveEngine.ProcessClosedBar(0, time, high, low, close, tickVol, realVol);
+   VWAP_SetBar(time, high, low, close, tickVol, realVol, D'2026.01.01 00:30', 100.6, 99.6, 100.0, 40, 0);
+   liveEngine.ProcessClosedBar(0, time, high, low, close, tickVol, realVol);
+   VWAP_SetBar(time, high, low, close, tickVol, realVol, D'2026.01.01 00:45', 100.4, 99.7, 100.0, 30, 0);
+   liveEngine.ProcessClosedBar(0, time, high, low, close, tickVol, realVol);
+   VWAP_SetBar(time, high, low, close, tickVol, realVol, D'2026.01.01 01:00', 100.0, 90.0, 99.0, 10, 0);
+   liveEngine.ProcessClosedBar(0, time, high, low, close, tickVol, realVol);
+   ASSERT_EQ_INT(liveEngine.ZonesTotal(), 1, "the simulated live engine holds one BUY zone before any MTF scan");
+
+   CVWAPZonesMTFScanner scanner;
+   scanner.Configure(1.0, 2.0, 1, 5, false, VWAP_T_POINT, 2);
+
+   int curIdx = scanner.IndexForPeriod(_Period);
+   ASSERT_TRUE(curIdx >= 0, "the test runner's own chart period is one of the 6 tracked MTF timeframes");
+   scanner.ScanAllReusingCurrent(_Symbol, 300, _Period, liveEngine);
+   ASSERT_TRUE(scanner.Signal(curIdx) == ZI_MTF_BUY,
+      "the current-timeframe slot reflects the live engine's own BUY zone directly, not an independent CopyRates rescan");
+
+   // DecideSignal() must not mutate a shared live engine.
+   int beforeCount = liveEngine.ZonesTotal();
+   liveEngine.CheckMitigation(1.0); // closes far below price_lo -> mitigates the BUY zone
+   ENUM_ZI_MTF_SIGNAL afterMitigation = scanner.DecideSignal(liveEngine);
+   ASSERT_TRUE(afterMitigation == ZI_MTF_NONE, "a mitigated zone is excluded from the decision");
+   ASSERT_EQ_INT(liveEngine.ZonesTotal(), beforeCount,
+      "DecideSignal() does not physically remove the mitigated zone from a shared/live engine (no RemoveMitigated side effect)");
+
+   // IndexForPeriod: round-trips for all 6 tracked timeframes, -1 for an untracked one.
+   ASSERT_EQ_INT(scanner.IndexForPeriod(PERIOD_M1),  0, "IndexForPeriod(M1) = 0");
+   ASSERT_EQ_INT(scanner.IndexForPeriod(PERIOD_M5),  1, "IndexForPeriod(M5) = 1");
+   ASSERT_EQ_INT(scanner.IndexForPeriod(PERIOD_M15), 2, "IndexForPeriod(M15) = 2");
+   ASSERT_EQ_INT(scanner.IndexForPeriod(PERIOD_H1),  3, "IndexForPeriod(H1) = 3");
+   ASSERT_EQ_INT(scanner.IndexForPeriod(PERIOD_H4),  4, "IndexForPeriod(H4) = 4");
+   ASSERT_EQ_INT(scanner.IndexForPeriod(PERIOD_D1),  5, "IndexForPeriod(D1) = 5");
+   ASSERT_EQ_INT(scanner.IndexForPeriod(PERIOD_M30), -1, "IndexForPeriod(M30) = -1 (not one of the 6 tracked timeframes)");
+}
+
+//+------------------------------------------------------------------+
+//| D1 session-degenerate case (task-3 design question, see the full   |
+//| derivation in VWAP_ZonesMTF.mqh's file header): a D1 bar's own      |
+//| time[] value already equals that day's own session-reset bucket,   |
+//| so the daily reset fires on EVERY D1 bar, collapsing VWAP to that   |
+//| single bar's own typical price and the deviation bands to exactly  |
+//| VWAP (zero variance). This pins that exact, documented behavior    |
+//| down as a regression test rather than leaving it as an unverified  |
+//| comment.                                                            |
+//+------------------------------------------------------------------+
+void VWAP_Test_MTFDailyDegenerateBands(void)
+{
+   Print("--- D1 session-degenerate case: daily reset collapses the bands to a single-bar VWAP");
+   datetime time[]; double high[], low[], close[]; long tickVol[], realVol[];
+
+   CVWAPZonesEngine eng;
+   eng.Configure(1.0, 2.0, 1, 5, false, VWAP_T_POINT);
+
+   // Day 1's "D1 bar": time[] is that day's own midnight bucket start, exactly as a real
+   // PERIOD_D1 bar's time[] would be.
+   VWAP_SetBar(time, high, low, close, tickVol, realVol, D'2026.01.01 00:00', 110.0, 90.0, 100.0, 777, 0);
+   eng.ProcessClosedBar(0, time, high, low, close, tickVol, realVol);
+   double typical1 = (110.0 + 90.0 + 100.0) / 3.0;
+   ASSERT_NEAR(eng.VWAP(), typical1, 1e-9, "day-1 D1 bar: VWAP collapses to that single bar's own typical price");
+   ASSERT_NEAR(eng.Band1Upper(), eng.VWAP(), 1e-9, "day-1 D1 bar: Band1Upper == VWAP (stddev is exactly 0 for a single-bar session)");
+   ASSERT_NEAR(eng.Band1Lower(), eng.VWAP(), 1e-9, "day-1 D1 bar: Band1Lower == VWAP too");
+   ASSERT_NEAR(eng.Band2Upper(), eng.VWAP(), 1e-9, "day-1 D1 bar: Band2Upper == VWAP (the 2-sigma band degenerates identically)");
+   ASSERT_NEAR(eng.Band2Lower(), eng.VWAP(), 1e-9, "day-1 D1 bar: Band2Lower == VWAP too");
+
+   // Day 2's "D1 bar": the daily reset fires again (new bucket) - VWAP must NOT blend with
+   // day 1, confirming the degeneracy repeats identically on every subsequent D1 bar.
+   VWAP_SetBar(time, high, low, close, tickVol, realVol, D'2026.01.02 00:00', 220.0, 180.0, 200.0, 333, 0);
+   eng.ProcessClosedBar(0, time, high, low, close, tickVol, realVol);
+   double typical2 = (220.0 + 180.0 + 200.0) / 3.0;
+   ASSERT_NEAR(eng.VWAP(), typical2, 1e-9, "day-2 D1 bar: VWAP is day 2's own typical price only - day 1 was NOT blended in");
+   ASSERT_NEAR(eng.Band1Lower(), eng.VWAP(), 1e-9, "day-2 D1 bar: bands still collapse to VWAP on the very next D1 bar too");
+}
+
+//+------------------------------------------------------------------+
 int VWAP_RunAllTests(void)
 {
    g_vwapTestFailures = 0;
@@ -535,6 +723,9 @@ int VWAP_RunAllTests(void)
    VWAP_Test_LiveReconfigure();
    VWAP_Test_PanelToggleContract();
    VWAP_Test_AlertThrottle();
+   VWAP_Test_MTFSignals();
+   VWAP_Test_MTFCurrentTimeframeReuse();
+   VWAP_Test_MTFDailyDegenerateBands();
    TEST_SUMMARY();
    return g_vwapTestFailures;
 }

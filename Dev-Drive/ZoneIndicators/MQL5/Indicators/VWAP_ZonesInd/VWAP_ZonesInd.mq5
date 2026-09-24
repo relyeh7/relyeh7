@@ -56,6 +56,7 @@
 
 #include <ZoneIndicators\ZI_Common.mqh>
 #include <VWAP_ZonesInd\VWAP_ZonesEngine.mqh>
+#include <VWAP_ZonesInd\VWAP_ZonesMTF.mqh>
 #include <VWAP_ZonesInd\VWAP_ZonesPanel.mqh>
 
 //+------------------------------------------------------------------+
@@ -72,6 +73,10 @@ input string Section_Alerts    = "==== Alerts ====";  // Alerts
 input bool   InpAlertPush      = true;    // Push Notification on New Zone / A+
 input bool   InpAlertSound     = true;    // Sound Alert on New Zone / A+
 input bool   InpAlertOnTouch   = false;   // Also Alert When an Existing Zone is Touched
+
+input string Section_MTF          = "==== MTF Signals ====";  // MTF Signals
+input int    InpMTFRefreshSeconds = 10;    // MTF Scan Refresh Interval (seconds)
+input int    InpMTFLookbackBars   = 300;   // MTF Scan Lookback (bars per timeframe)
 
 input string Section_Panel     = "==== Control Panel ====";  // Control Panel
 input bool   InpShowPanel      = true;    // Show Control Panel
@@ -113,6 +118,7 @@ CVWAPZonesPanel  ExtPanel;
 datetime g_lastAlertNewZone    = 0;
 datetime g_lastAlertConfluence = 0;
 datetime g_lastAlertTouch      = 0;
+datetime g_lastMTFScan         = 0;
 
 //+------------------------------------------------------------------+
 string ZoneObjName(const ZI_Zone &z)
@@ -285,10 +291,16 @@ int OnInit()
    int exhaustionBars = (InpExhaustionBars >= 2) ? InpExhaustionBars : 5;
 
    g_engine.Configure(InpBand1Mult, InpBand2Mult, touchBand, exhaustionBars, InpUseRealVolume, point);
+   // Fixed detection-param definition for all 6 MTF scans (including the 5 non-current,
+   // throwaway-engine ones) - the main chart's live touch-band/exhaustion-bars panel
+   // requests never reach them. See VWAP_ZonesMTF.mqh's Configure() doc comment.
+   g_mtf_scanner.Configure(InpBand1Mult, InpBand2Mult, touchBand, exhaustionBars, InpUseRealVolume, point,
+                            g_min_zone_strength);
 
    g_lastAlertNewZone    = 0;
    g_lastAlertConfluence = 0;
    g_lastAlertTouch      = 0;
+   g_lastMTFScan         = 0;
 
    ObjectsDeleteAll(0, "ZI_VWAP_");
 
@@ -321,7 +333,19 @@ void OnDeinit(const int reason)
 //+------------------------------------------------------------------+
 void OnTimer()
 {
-   if(InpShowPanel) ExtPanel.Refresh();
+   if(InpShowPanel)
+   {
+      datetime now = TimeCurrent();
+      if(VWAP_MTFShouldScan(g_lastMTFScan, now, InpMTFRefreshSeconds))
+      {
+         // The current chart timeframe is never re-scanned via CopyRates - it reuses g_engine's
+         // own live, continuously-updated state (design spec S4), so it can never disagree with
+         // what's actually drawn on the chart for that timeframe.
+         g_mtf_scanner.ScanAllReusingCurrent(_Symbol, InpMTFLookbackBars, _Period, g_engine);
+         g_lastMTFScan = now;
+      }
+      ExtPanel.Refresh();
+   }
 }
 
 //+------------------------------------------------------------------+

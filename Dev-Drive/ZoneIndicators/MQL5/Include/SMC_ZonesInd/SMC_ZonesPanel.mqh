@@ -15,6 +15,7 @@
 #include <Controls\Button.mqh>
 #include <Controls\CheckBox.mqh>
 #include <Controls\SpinEdit.mqh>
+#include <SMC_ZonesInd\SMC_ZonesMTF.mqh>
 
 //--- Runtime-mutable flags the panel owns. Drawing/alert code reads ONLY these,
 //--- never the Inp* inputs directly (seeded once from Inp* in OnInit).
@@ -22,6 +23,7 @@ bool g_show_ob          = true;
 bool g_show_fvg         = true;
 bool g_show_sweep       = true;
 bool g_show_pd          = true;
+bool g_show_mtf         = true; // "Show MTF Row" checkbox - independent of the other layer toggles
 int  g_min_confluence   = 2;
 bool g_alert_push       = true;
 bool g_alert_sound      = true;
@@ -92,9 +94,15 @@ private:
    CLabel            m_lbl_alerts;
    CSMCDarkCheckBox  m_chk_push;
    CSMCDarkCheckBox  m_chk_sound;
+   CPanel            m_bar_mtf;
+   CLabel            m_lbl_mtf;
+   CSMCDarkCheckBox  m_chk_mtf;
+   CLabel            m_lbl_mtf_tf[6];
+   CLabel            m_lbl_mtf_arrow[6];
 
    int               m_client_h;
    int               m_y_layers, m_y_chk1, m_y_chk2, m_y_conf, m_y_alerts, m_y_chk3;
+   int               m_y_mtf_hdr, m_y_mtf_chk, m_y_mtf_row;
 
 public:
                      CSMCZonesPanel(void) : m_client_h(0) {}
@@ -124,6 +132,7 @@ protected:
    void              OnChangeConfluence(void);
    void              OnChangePush(void);
    void              OnChangeSound(void);
+   void              OnChangeMtf(void);
 };
 
 //+------------------------------------------------------------------+
@@ -135,7 +144,10 @@ void CSMCZonesPanel::Layout(void)
    m_y_chk2   = y; y += SMCP_CHK_H + SMCP_GAP;
    m_y_conf   = y; y += SMCP_HDR_H + SMCP_GAP;
    m_y_alerts = y; y += SMCP_HDR_H + SMCP_GAP;
-   m_y_chk3   = y; y += SMCP_CHK_H;
+   m_y_chk3   = y; y += SMCP_CHK_H + SMCP_GAP;
+   m_y_mtf_hdr = y; y += SMCP_HDR_H + SMCP_GAP;
+   m_y_mtf_chk = y; y += SMCP_CHK_H;
+   m_y_mtf_row = y; y += SMCP_ROW_H + SMCP_ROW_H;
    m_client_h = y + SMCP_IND;
 }
 
@@ -230,6 +242,23 @@ bool CSMCZonesPanel::CreateControls(void)
    if(!MakeCheck(m_chk_push,  "ChkPush",  SMCP_IND, m_y_chk3, SMCP_CHK_W, "Push notification", g_alert_push))  return false;
    if(!MakeCheck(m_chk_sound, "ChkSound", col2_x,   m_y_chk3, SMCP_CHK_W, "Sound alert",        g_alert_sound)) return false;
 
+   //--- MTF Signals
+   if(!MakeBar(m_bar_mtf, "BarMtf", SMCP_IND, m_y_mtf_hdr, full_w, SMCP_HDR_H, SMCP_CLR_HDR)) return false;
+   if(!MakeLabel(m_lbl_mtf, "LblMtf", SMCP_IND + 6, m_y_mtf_hdr, full_w - 6, "MTF SIGNALS", clrWhite, 7, "Segoe UI Semibold"))
+      return false;
+   if(!MakeCheck(m_chk_mtf, "ChkMtf", SMCP_IND, m_y_mtf_chk, SMCP_CHK_W, "Show MTF Row", g_show_mtf)) return false;
+
+   string tfNames[6] = {"M1", "M5", "M15", "H1", "H4", "D1"};
+   int cell_w = full_w / 6;
+   for(int i = 0; i < 6; i++)
+   {
+      int cx = SMCP_IND + i * cell_w;
+      if(!MakeLabel(m_lbl_mtf_tf[i], "LblMtfTf" + IntegerToString(i), cx, m_y_mtf_row, cell_w, tfNames[i], clrSilver, 7))
+         return false;
+      if(!MakeLabel(m_lbl_mtf_arrow[i], "LblMtfArr" + IntegerToString(i), cx, m_y_mtf_row + SMCP_ROW_H, cell_w, "-", clrGray, 9, "Segoe UI Semibold"))
+         return false;
+   }
+
    return true;
 }
 
@@ -239,6 +268,22 @@ void CSMCZonesPanel::Refresh(void)
    //--- Panel may have been closed with the caption X; the program (and its
    //--- timer) keeps running, so guard against writing to dead controls.
    if(ObjectFind(m_chart_id, m_chk_ob.Name()) < 0) return;
+
+   for(int i = 0; i < 6; i++)
+   {
+      ENUM_ZI_MTF_SIGNAL sig = g_mtf_scanner.Signal(i);
+      color clr = clrGray;
+      string txt = "-";
+      if(sig == ZI_MTF_BUY)  { clr = clrLime; txt = "^"; }
+      if(sig == ZI_MTF_SELL) { clr = clrRed;  txt = "v"; }
+      m_lbl_mtf_arrow[i].Color(clr);
+      m_lbl_mtf_arrow[i].Text(txt);
+      if(g_show_mtf) { m_lbl_mtf_arrow[i].Show(); m_lbl_mtf_tf[i].Show(); }
+      else           { m_lbl_mtf_arrow[i].Hide(); m_lbl_mtf_tf[i].Hide(); }
+   }
+   if(g_show_mtf) { m_bar_mtf.Show(); m_lbl_mtf.Show(); }
+   else           { m_bar_mtf.Hide(); m_lbl_mtf.Hide(); }
+
    ChartRedraw(m_chart_id);
 }
 
@@ -279,6 +324,7 @@ void CSMCZonesPanel::OnChangePD(void)
 void CSMCZonesPanel::OnChangeConfluence(void)
 {
    g_min_confluence = (int)m_spin_conf.Value();
+   g_mtf_scanner.SetMinConfluence(g_min_confluence); // keep the MTF row's A+ threshold live-synced
    g_panel_force_redraw = true;
    ChartRedraw(m_chart_id);
 }
@@ -293,6 +339,12 @@ void CSMCZonesPanel::OnChangeSound(void)
    g_alert_sound = m_chk_sound.Checked();
 }
 
+void CSMCZonesPanel::OnChangeMtf(void)
+{
+   g_show_mtf = m_chk_mtf.Checked();
+   Refresh();
+}
+
 //+------------------------------------------------------------------+
 EVENT_MAP_BEGIN(CSMCZonesPanel)
    ON_EVENT(ON_CHANGE, m_chk_ob,    OnChangeOB)
@@ -302,6 +354,7 @@ EVENT_MAP_BEGIN(CSMCZonesPanel)
    ON_EVENT(ON_CHANGE, m_spin_conf, OnChangeConfluence)
    ON_EVENT(ON_CHANGE, m_chk_push,  OnChangePush)
    ON_EVENT(ON_CHANGE, m_chk_sound, OnChangeSound)
+   ON_EVENT(ON_CHANGE, m_chk_mtf,   OnChangeMtf)
 EVENT_MAP_END(CAppDialog)
 
 #endif // SMC_ZONES_PANEL_MQH

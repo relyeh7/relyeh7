@@ -10,6 +10,7 @@
 #include "SMC_TestAsserts.mqh"
 #include <ZoneIndicators\ZI_Common.mqh>
 #include <SMC_ZonesInd\SMC_ZonesEngine.mqh>
+#include <SMC_ZonesInd\SMC_ZonesMTF.mqh>
 #include <SMC_ZonesInd\SMC_ZonesPanel.mqh>
 
 #define SMC_T_POINT 0.01
@@ -431,6 +432,87 @@ void SMC_Test_AlertThrottle(void)
 }
 
 //+------------------------------------------------------------------+
+//| MTF signal row: CSMCZonesMTFScanner.DecideSignal() driven with    |
+//| synthetic engines (no CopyRates/real symbol data needed), plus    |
+//| the SMC_MTFShouldScan() refresh-interval gate.                     |
+//+------------------------------------------------------------------+
+void SMC_Test_MTFSignals(void)
+{
+   Print("--- MTF Signals (CSMCZonesMTFScanner)");
+   datetime time[]; double open[], high[], low[], close[];
+
+   CSMCZonesMTFScanner scanner;
+   scanner.Configure(3.0, 1.0, 50.0, 50, 50, SMC_T_POINT, 2);
+
+   // Classification: a single BUY OB -> ZI_MTF_BUY
+   SMC_BuildBaseline(time, open, high, low, close, 6);
+   open[3] = 100.00; close[3] = 100.00; high[3] = 100.05; low[3] = 99.95;
+   open[4] = 99.95;  close[4] = 101.50; high[4] = 101.60; low[4] = 99.90; // bullish impulse
+   CSMCZonesEngine engBuyOnly;
+   engBuyOnly.Configure(3.0, 1.0, 50.0, 50, 50, SMC_T_POINT);
+   engBuyOnly.ProcessClosedBar(4, time, open, high, low, close);
+   ASSERT_TRUE(scanner.DecideSignal(engBuyOnly) == ZI_MTF_BUY, "a single active BUY zone classifies as ZI_MTF_BUY");
+
+   // Classification: a single SELL OB -> ZI_MTF_SELL
+   SMC_BuildBaseline(time, open, high, low, close, 6);
+   open[3] = 100.00; close[3] = 100.00; high[3] = 100.05; low[3] = 99.95;
+   open[4] = 100.05; close[4] = 98.50;  high[4] = 100.06; low[4] = 98.40; // bearish impulse
+   CSMCZonesEngine engSellOnly;
+   engSellOnly.Configure(3.0, 1.0, 50.0, 50, 50, SMC_T_POINT);
+   engSellOnly.ProcessClosedBar(4, time, open, high, low, close);
+   ASSERT_TRUE(scanner.DecideSignal(engSellOnly) == ZI_MTF_SELL, "a single active SELL zone classifies as ZI_MTF_SELL");
+
+   // Classification: no zones at all -> ZI_MTF_NONE
+   SMC_BuildBaseline(time, open, high, low, close, 6);
+   CSMCZonesEngine engNone;
+   engNone.Configure(3.0, 1.0, 50.0, 50, 50, SMC_T_POINT);
+   engNone.ProcessClosedBar(4, time, open, high, low, close);
+   ASSERT_TRUE(scanner.DecideSignal(engNone) == ZI_MTF_NONE, "no active zones in either direction classifies as ZI_MTF_NONE");
+
+   // A+ priority over normal when both directions coexist: three mutually-overlapping BUY
+   // OBs stack to strength 3 (A+ under a min-confluence of 3), against a later, isolated
+   // (non-overlapping) SELL OB that stays normal strength. Both zones sit in the same ~100
+   // price neighborhood as the flat baseline, so no incidental FVG gap or premium/discount
+   // bonus can cross the A+ threshold on the SELL side. Naive most-recent-wins would pick
+   // the later SELL zone; the A+ rule must still pick BUY.
+   SMC_BuildBaseline(time, open, high, low, close, 18);
+   open[3]  = 100.00; close[3]  = 100.00; high[3]  = 100.05; low[3]  = 99.95;  // BUY OB-A candle
+   open[4]  = 99.95;  close[4]  = 101.50; high[4]  = 101.60; low[4]  = 99.90;  // bullish impulse A
+   open[7]  = 100.00; close[7]  = 100.00; high[7]  = 100.10; low[7]  = 99.90;  // BUY OB-B candle (overlaps A)
+   open[8]  = 99.90;  close[8]  = 102.00; high[8]  = 102.10; low[8]  = 99.85;  // bullish impulse B
+   open[11] = 100.00; close[11] = 100.00; high[11] = 100.08; low[11] = 99.92;  // BUY OB-C candle (overlaps A and B)
+   open[12] = 99.92;  close[12] = 102.50; high[12] = 102.60; low[12] = 99.80;  // bullish impulse C -> A/B/C all stack to strength 3 (A+)
+   open[15] = 100.00; close[15] = 100.00; high[15] = 100.05; low[15] = 99.95;  // SELL OB-D candle (same price band, no overlap with A/B/C)
+   open[16] = 100.05; close[16] = 99.99;  high[16] = 100.06; low[16] = 99.95;  // bearish impulse D (body 0.06 >= 3*0.01) -> isolated SELL,
+                                                                                // normal strength; close stays ABOVE every BUY zone's
+                                                                                // price_lo (99.90/99.92/99.95) so it does not also mitigate A/B/C
+                                                                                // (CheckMitigation is close-only, applies to ALL zones, not just new ones)
+
+   CSMCZonesEngine engMixed;
+   engMixed.Configure(3.0, 1.0, 50.0, 50, 50, SMC_T_POINT);
+   engMixed.ProcessClosedBar(4, time, open, high, low, close);
+   engMixed.ProcessClosedBar(8, time, open, high, low, close);
+   engMixed.ProcessClosedBar(12, time, open, high, low, close);
+   engMixed.ProcessClosedBar(16, time, open, high, low, close);
+
+   ASSERT_EQ_INT(engMixed.ZonesTotal(), 4, "exactly 3 overlapping BUY OBs + 1 isolated SELL OB were created (no incidental FVG/sweep zones)");
+   ZI_Zone zbA, zbB, zbC, zsD;
+   engMixed.GetZone(0, zbA); engMixed.GetZone(1, zbB); engMixed.GetZone(2, zbC); engMixed.GetZone(3, zsD);
+   ASSERT_TRUE(zbA.strength >= 3 && zbB.strength >= 3 && zbC.strength >= 3, "all three mutually-overlapping BUY OBs stack to A+ strength (>=3)");
+   ASSERT_TRUE(zsD.strength < 3 && zsD.bar_time > zbC.bar_time, "the isolated SELL OB stays normal strength and formed after the BUY OBs");
+
+   CSMCZonesMTFScanner scannerAplus;
+   scannerAplus.Configure(3.0, 1.0, 50.0, 50, 50, SMC_T_POINT, 3); // min confluence 3: BUY A/B/C qualify A+, SELL D does not
+   ASSERT_TRUE(scannerAplus.DecideSignal(engMixed) == ZI_MTF_BUY, "A+ BUY zones outrank a more-recent but merely-normal SELL zone");
+
+   // Refresh-interval gate: SMC_MTFShouldScan mirrors OnTimer()'s once-per-N-seconds throttle.
+   datetime t0 = D'2026.01.01 00:00:00';
+   ASSERT_TRUE(!SMC_MTFShouldScan(t0, t0 + 5, 10), "5s elapsed does not yet meet a 10s refresh interval");
+   ASSERT_TRUE(SMC_MTFShouldScan(t0, t0 + 10, 10), "exactly 10s elapsed meets the refresh interval (>=, not >)");
+   ASSERT_TRUE(SMC_MTFShouldScan(t0, t0 + 11, 10), "more than 10s elapsed still meets the refresh interval");
+}
+
+//+------------------------------------------------------------------+
 int SMC_RunAllTests(void)
 {
    g_smcTestFailures = 0;
@@ -444,6 +526,7 @@ int SMC_RunAllTests(void)
    SMC_Test_PremiumDiscount();
    SMC_Test_PanelToggleContract();
    SMC_Test_AlertThrottle();
+   SMC_Test_MTFSignals();
    TEST_SUMMARY();
    return g_smcTestFailures;
 }

@@ -19,6 +19,7 @@
 
 #include <ZoneIndicators\ZI_Common.mqh>
 #include <SMC_ZonesInd\SMC_ZonesEngine.mqh>
+#include <SMC_ZonesInd\SMC_ZonesMTF.mqh>
 #include <SMC_ZonesInd\SMC_ZonesPanel.mqh>
 
 //+------------------------------------------------------------------+
@@ -35,6 +36,10 @@ input string Section_Alerts    = "==== Alerts ====";  // Alerts
 input bool   InpAlertPush      = true;    // Push Notification on New Zone / A+
 input bool   InpAlertSound     = true;    // Sound Alert on New Zone / A+
 input bool   InpAlertOnTouch   = false;   // Also Alert When an Existing Zone is Touched
+
+input string Section_MTF          = "==== MTF Signals ====";  // MTF Signals
+input int    InpMTFRefreshSeconds = 10;    // MTF Scan Refresh Interval (seconds)
+input int    InpMTFLookbackBars   = 300;   // MTF Scan Lookback (bars per timeframe)
 
 input string Section_Panel     = "==== Control Panel ====";  // Control Panel
 input bool   InpShowPanel      = true;    // Show Control Panel
@@ -64,6 +69,7 @@ CSMCZonesPanel  ExtPanel;
 datetime g_lastAlertNewZone    = 0;
 datetime g_lastAlertConfluence = 0;
 datetime g_lastAlertTouch      = 0;
+datetime g_lastMTFScan         = 0;
 
 //+------------------------------------------------------------------+
 string ZoneObjName(const ZI_Zone &z)
@@ -239,10 +245,13 @@ int OnInit()
    if(point <= 0.0) point = _Point;
    g_engine.Configure(InpImpulseFactor, InpFVGMinPoints, InpEQTolerancePoints,
                        InpRangeLookbackBars, InpSwingLookbackBars, point);
+   g_mtf_scanner.Configure(InpImpulseFactor, InpFVGMinPoints, InpEQTolerancePoints,
+                            InpRangeLookbackBars, InpSwingLookbackBars, point, g_min_confluence);
 
    g_lastAlertNewZone    = 0;
    g_lastAlertConfluence = 0;
    g_lastAlertTouch      = 0;
+   g_lastMTFScan         = 0;
 
    ObjectsDeleteAll(0, "ZI_SMC_");
 
@@ -275,7 +284,16 @@ void OnDeinit(const int reason)
 //+------------------------------------------------------------------+
 void OnTimer()
 {
-   if(InpShowPanel) ExtPanel.Refresh();
+   if(InpShowPanel)
+   {
+      datetime now = TimeCurrent();
+      if(SMC_MTFShouldScan(g_lastMTFScan, now, InpMTFRefreshSeconds))
+      {
+         g_mtf_scanner.ScanAll(_Symbol, InpMTFLookbackBars);
+         g_lastMTFScan = now;
+      }
+      ExtPanel.Refresh();
+   }
 }
 
 //+------------------------------------------------------------------+

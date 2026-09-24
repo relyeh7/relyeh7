@@ -33,6 +33,8 @@ class CSMCZonesMTFScanner
 {
 private:
    ENUM_ZI_MTF_SIGNAL m_signal[6];
+   ENUM_TIMEFRAMES    m_tfs[6]; // single source of truth for the 6 tracked timeframes' order/identity,
+                                 // shared by ScanAll(), ScanAllReusingCurrent() and IndexForPeriod()
 
    double   m_impulseFactor;
    double   m_fvgMinPoints;
@@ -54,18 +56,38 @@ public:
    // SMC_ZonesPanel.mqh's OnChangeConfluence, which already updates g_min_confluence live.
    void   SetMinConfluence(int minConfluence) { m_minConfluence = (minConfluence >= 1) ? minConfluence : 2; }
    void   ScanAll(const string symbol, const int lookback_bars);
+
+   // Same as ScanAll(), except the ONE tracked timeframe matching currentPeriod (if any) is not
+   // re-scanned via CopyRates/a throwaway engine at all - its signal is decided directly from
+   // liveEngine (the main indicator's own, continuously-updated g_engine), per design spec S4:
+   // "la temporalidad del grafico actual no se re-escanea - se reusa el resultado que el
+   // indicador ya calcula en OnCalculate". This is what OnTimer() calls; ScanAll() itself stays
+   // available standalone (and spec-signature-exact) for the other 5 slots / direct testing.
+   void   ScanAllReusingCurrent(const string symbol, const int lookback_bars,
+                                  const ENUM_TIMEFRAMES currentPeriod, const CSMCZonesEngine &liveEngine);
+
    ENUM_ZI_MTF_SIGNAL Signal(const int tf_index) const;
 
-   // Decides BBUY/SELL/NONE from an already-populated engine's current zone list. Exposed
-   // (not private) so the headless test suite can drive it with synthetic engines, bypassing
-   // CopyRates - see SMC_Test_MTFSignals in SMC_TestSuite.mqh.
-   ENUM_ZI_MTF_SIGNAL DecideSignal(CSMCZonesEngine &eng);
+   // Index (0..5) of `period` among the 6 tracked timeframes, or -1 if it isn't one of them.
+   int    IndexForPeriod(const ENUM_TIMEFRAMES period) const;
+
+   // Decides BUY/SELL/NONE from an already-populated engine's current zone list, WITHOUT
+   // mutating it (mitigated zones are skipped, never physically removed via RemoveMitigated) -
+   // this is what makes it safe to call directly against a shared/live engine such as the main
+   // indicator's own g_engine (see ScanAllReusingCurrent): a destructive RemoveMitigated() call
+   // from an OnTimer-driven scan could race SyncZoneObjects()'s own pending-deletion bookkeeping
+   // in SMC_ZonesInd.mq5 and orphan chart objects. Exposed (not private) so the headless test
+   // suite can drive it with synthetic engines, bypassing CopyRates - see SMC_Test_MTFSignals
+   // and SMC_Test_MTFCurrentTimeframeReuse in SMC_TestSuite.mqh.
+   ENUM_ZI_MTF_SIGNAL DecideSignal(const CSMCZonesEngine &eng) const;
 };
 
 //+------------------------------------------------------------------+
 CSMCZonesMTFScanner::CSMCZonesMTFScanner(void)
 {
    for(int i = 0; i < 6; i++) m_signal[i] = ZI_MTF_NONE;
+   m_tfs[0] = PERIOD_M1;  m_tfs[1] = PERIOD_M5;  m_tfs[2] = PERIOD_M15;
+   m_tfs[3] = PERIOD_H1;  m_tfs[4] = PERIOD_H4;  m_tfs[5] = PERIOD_D1;
    m_impulseFactor      = 3.0;
    m_fvgMinPoints       = 0.0;
    m_eqTolerancePoints  = 5.0;
@@ -91,9 +113,25 @@ void CSMCZonesMTFScanner::Configure(double impulseFactor, double fvgMinPoints, d
 //+------------------------------------------------------------------+
 void CSMCZonesMTFScanner::ScanAll(const string symbol, const int lookback_bars)
 {
-   ENUM_TIMEFRAMES tfs[6] = { PERIOD_M1, PERIOD_M5, PERIOD_M15, PERIOD_H1, PERIOD_H4, PERIOD_D1 };
    for(int t = 0; t < 6; t++)
-      m_signal[t] = ScanTimeframe(symbol, tfs[t], lookback_bars);
+      m_signal[t] = ScanTimeframe(symbol, m_tfs[t], lookback_bars);
+}
+
+//+------------------------------------------------------------------+
+void CSMCZonesMTFScanner::ScanAllReusingCurrent(const string symbol, const int lookback_bars,
+                                                  const ENUM_TIMEFRAMES currentPeriod, const CSMCZonesEngine &liveEngine)
+{
+   for(int t = 0; t < 6; t++)
+      m_signal[t] = (m_tfs[t] == currentPeriod) ? DecideSignal(liveEngine)
+                                                 : ScanTimeframe(symbol, m_tfs[t], lookback_bars);
+}
+
+//+------------------------------------------------------------------+
+int CSMCZonesMTFScanner::IndexForPeriod(const ENUM_TIMEFRAMES period) const
+{
+   for(int i = 0; i < 6; i++)
+      if(m_tfs[i] == period) return i;
+   return -1;
 }
 
 //+------------------------------------------------------------------+
@@ -149,19 +187,26 @@ ENUM_ZI_MTF_SIGNAL CSMCZonesMTFScanner::ScanTimeframe(const string symbol, const
 }
 
 //+------------------------------------------------------------------+
-//| Signal rule (design spec S2/S6): for each direction, the most     |
-//| recent non-mitigated zone decides that direction's candidate,     |
-//| with an A+ zone (strength >= min confluence) preferred over a     |
-//| normal one of the SAME direction. If only one direction has an    |
-//| active candidate, it wins outright. If both directions have one,  |
-//| A+ beats normal ACROSS directions too (this is the only place the |
-//| rule is observable, since ENUM_ZI_MTF_SIGNAL has no separate A+    |
-//| value); if both (or neither) candidate is A+, the more recently   |
-//| formed one wins, ties favoring BUY.                                |
+//| Signal rule - ADOPTED STANDARD for all 3 Zone Indicators (SMC/CRT/ |
+//| VWAP MTF scanners must all implement this identical rule; design   |
+//| spec S2/S6, cross-direction interpretation and tie-break ruled by  |
+//| the controller on 2026-09-23 after Task 1 review):                 |
+//|                                                                     |
+//|  1. Per direction (BUY, SELL) independently: the most RECENT        |
+//|     non-mitigated zone decides that direction's candidate, with an |
+//|     A+ zone (strength >= min confluence) preferred over a normal   |
+//|     one of the SAME direction when both coexist.                  |
+//|  2. If only one direction has an active candidate, it wins         |
+//|     outright (NONE if neither does).                               |
+//|  3. If BOTH directions have an active candidate: A+ BEATS NORMAL   |
+//|     ACROSS directions too - this is the only place the A+-priority |
+//|     rule is externally observable, since ENUM_ZI_MTF_SIGNAL has no |
+//|     separate A+ value (only BUY/SELL/NONE).                        |
+//|  4. If both (or neither) candidate is A+, the more RECENTLY formed |
+//|     one wins; an exact tie (equal bar_time) favors BUY.            |
 //+------------------------------------------------------------------+
-ENUM_ZI_MTF_SIGNAL CSMCZonesMTFScanner::DecideSignal(CSMCZonesEngine &eng)
+ENUM_ZI_MTF_SIGNAL CSMCZonesMTFScanner::DecideSignal(const CSMCZonesEngine &eng) const
 {
-   eng.RemoveMitigated();
    int n = eng.ZonesTotal();
 
    bool     haveBuyAplus = false, haveBuyNormal = false, haveSellAplus = false, haveSellNormal = false;
@@ -169,6 +214,7 @@ ENUM_ZI_MTF_SIGNAL CSMCZonesMTFScanner::DecideSignal(CSMCZonesEngine &eng)
 
    for(int i = 0; i < n; i++)
    {
+      if(eng.IsMitigated(i)) continue; // skip, don't remove - eng may be a shared/live engine (see class comment)
       ZI_Zone z;
       if(!eng.GetZone(i, z)) continue;
       bool aplus = (z.strength >= m_minConfluence);

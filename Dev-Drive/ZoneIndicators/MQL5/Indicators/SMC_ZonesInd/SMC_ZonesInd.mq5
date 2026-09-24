@@ -289,7 +289,10 @@ void OnTimer()
       datetime now = TimeCurrent();
       if(SMC_MTFShouldScan(g_lastMTFScan, now, InpMTFRefreshSeconds))
       {
-         g_mtf_scanner.ScanAll(_Symbol, InpMTFLookbackBars);
+         // The current chart timeframe is never re-scanned via CopyRates - it reuses g_engine's
+         // own live, continuously-updated state (design spec S4), so it can never disagree with
+         // what's actually drawn on the chart for that timeframe.
+         g_mtf_scanner.ScanAllReusingCurrent(_Symbol, InpMTFLookbackBars, _Period, g_engine);
          g_lastMTFScan = now;
       }
       ExtPanel.Refresh();

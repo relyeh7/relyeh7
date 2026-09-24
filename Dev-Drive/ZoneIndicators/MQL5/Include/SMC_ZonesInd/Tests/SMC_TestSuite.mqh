@@ -513,6 +513,56 @@ void SMC_Test_MTFSignals(void)
 }
 
 //+------------------------------------------------------------------+
+//| MTF current-timeframe reuse (design spec S4): the chart's own      |
+//| period must be decided from the live engine directly, never via    |
+//| an independent CopyRates rescan - and DecideSignal() must not      |
+//| mutate a shared/live engine (no RemoveMitigated side effect), or    |
+//| an OnTimer-driven call could race SyncZoneObjects()'s own          |
+//| pending-deletion bookkeeping in SMC_ZonesInd.mq5 and orphan chart  |
+//| objects.                                                            |
+//+------------------------------------------------------------------+
+void SMC_Test_MTFCurrentTimeframeReuse(void)
+{
+   Print("--- MTF current-timeframe reuse (no throwaway CopyRates scan for the chart's own period)");
+   datetime time[]; double open[], high[], low[], close[];
+
+   // Simulates g_engine: a "live" engine holding one BUY zone.
+   SMC_BuildBaseline(time, open, high, low, close, 6);
+   open[3] = 100.00; close[3] = 100.00; high[3] = 100.05; low[3] = 99.95;
+   open[4] = 99.95;  close[4] = 101.50; high[4] = 101.60; low[4] = 99.90; // bullish impulse
+   CSMCZonesEngine liveEngine;
+   liveEngine.Configure(3.0, 1.0, 50.0, 50, 50, SMC_T_POINT);
+   liveEngine.ProcessClosedBar(4, time, open, high, low, close);
+   ASSERT_EQ_INT(liveEngine.ZonesTotal(), 1, "the simulated live engine holds one BUY zone before any MTF scan");
+
+   CSMCZonesMTFScanner scanner;
+   scanner.Configure(3.0, 1.0, 50.0, 50, 50, SMC_T_POINT, 2);
+
+   int curIdx = scanner.IndexForPeriod(_Period);
+   ASSERT_TRUE(curIdx >= 0, "the test runner's own chart period is one of the 6 tracked MTF timeframes");
+   scanner.ScanAllReusingCurrent(_Symbol, 300, _Period, liveEngine);
+   ASSERT_TRUE(scanner.Signal(curIdx) == ZI_MTF_BUY,
+      "the current-timeframe slot reflects the live engine's own BUY zone directly, not an independent CopyRates rescan");
+
+   // DecideSignal() must not mutate a shared live engine.
+   int beforeCount = liveEngine.ZonesTotal();
+   liveEngine.CheckMitigation(90.00); // closes well below price_lo -> mitigates the BUY zone
+   ENUM_ZI_MTF_SIGNAL afterMitigation = scanner.DecideSignal(liveEngine);
+   ASSERT_TRUE(afterMitigation == ZI_MTF_NONE, "a mitigated zone is excluded from the decision");
+   ASSERT_EQ_INT(liveEngine.ZonesTotal(), beforeCount,
+      "DecideSignal() does not physically remove the mitigated zone from a shared/live engine (no RemoveMitigated side effect)");
+
+   // IndexForPeriod: round-trips for all 6 tracked timeframes, -1 for an untracked one.
+   ASSERT_EQ_INT(scanner.IndexForPeriod(PERIOD_M1),  0, "IndexForPeriod(M1) = 0");
+   ASSERT_EQ_INT(scanner.IndexForPeriod(PERIOD_M5),  1, "IndexForPeriod(M5) = 1");
+   ASSERT_EQ_INT(scanner.IndexForPeriod(PERIOD_M15), 2, "IndexForPeriod(M15) = 2");
+   ASSERT_EQ_INT(scanner.IndexForPeriod(PERIOD_H1),  3, "IndexForPeriod(H1) = 3");
+   ASSERT_EQ_INT(scanner.IndexForPeriod(PERIOD_H4),  4, "IndexForPeriod(H4) = 4");
+   ASSERT_EQ_INT(scanner.IndexForPeriod(PERIOD_D1),  5, "IndexForPeriod(D1) = 5");
+   ASSERT_EQ_INT(scanner.IndexForPeriod(PERIOD_M30), -1, "IndexForPeriod(M30) = -1 (not one of the 6 tracked timeframes)");
+}
+
+//+------------------------------------------------------------------+
 int SMC_RunAllTests(void)
 {
    g_smcTestFailures = 0;
@@ -527,6 +577,7 @@ int SMC_RunAllTests(void)
    SMC_Test_PanelToggleContract();
    SMC_Test_AlertThrottle();
    SMC_Test_MTFSignals();
+   SMC_Test_MTFCurrentTimeframeReuse();
    TEST_SUMMARY();
    return g_smcTestFailures;
 }
